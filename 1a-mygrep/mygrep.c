@@ -65,26 +65,35 @@ int main(int argc, char *argv[]) {
     printf("name=%s; keyword=%s, ignoreCase=%d; optdiff=%d;\noutputFlag=%d;\toutputFile=%s;\ninputFlag=%d;\tintputFile=%s;\n", name, keyword, ignoreCase, argc-optind, outputFlag, outputFile, inputFlag, inputFile);
 
     //TODO: set up reading from file/s or stdin
-    if(inputFlag) {
-        while(optind < argc) {
-            FILE* fp;
-            char *line = NULL;
-            size_t len = 0;
-            ssize_t read;
+    FILE* fp_read;
+    FILE* fp_write;
+    if(!inputFlag) {
+       fp_read = stdin;
+    }
 
-            fp = fopen(argv[optind++], "r");
-            if (fp == NULL)
+    while(optind < argc || (inputFlag == 0) ) {
+        char *line = NULL;
+        size_t len = 0;
+        ssize_t read;
+
+        if(inputFlag) {
+            fp_read = fopen(argv[optind++], "r");
+            if (fp_read == NULL)
                 exit(EXIT_FAILURE);
-
-            while ((read = getline(&line, &len, fp)) != -1) {
-                printf("Retrieved line of length %zu :\n", read);
-                printf("%s", line);
-                if(strstr(line, keyword)) {
-                        printf("%s: ^^^^^^ contains %s\n", name, keyword);
-                }
-            }
-            free(line);
         }
+
+        while ((read = getline(&line, &len, fp_read)) != -1) {
+            printf("Retrieved line of length %zu :\n", read);
+            printf("%s", line);
+            if( (!inputFlag) && strlen(line) == 1 ) {
+                inputFlag=1; // to exit while loop;
+                break;
+            }
+            if(strstr(line, keyword)) {
+                printf("%s: ^^^^^^ contains %s\n", name, keyword); // print stuff
+            }
+        }
+        free(line);
     }
 
     //TODO: grep stuff and return it to file or stdout
