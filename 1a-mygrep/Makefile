@@ -11,4 +11,4 @@ mygrep.o: mygrep.c clean
 	$(CC) $(CFLAGS) mygrep.c
 
 clean:
-	$(RM) mygrep
+	$(RM) mygrep mygrep.o
