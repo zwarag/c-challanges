@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
+#include <ctype.h>
 
 static char* name;
 static int ignoreCase = 1;
@@ -44,17 +45,20 @@ int main(int argc, char *argv[]) {
 
     if(optind < argc) {
         keyword = argv[optind++];
+        //printf("\n\n\n\n%s\n\n\n\n", keyword);
     } else { // no keword 
         usage();
     }
+
+    //printf("\n\n\n\n%s\n\n\n\n", keyword);
 
     int optindOrig = optind;
     while (optind < argc) {
         inputFlag = 1;
         // Check if inputFiles are readable;
         inputFile = argv[optind++];
-        printf(inputFile);
-        printf("\n");
+        //printf(inputFile);
+        //printf("\n");
         if( access( inputFile, F_OK|R_OK ) != -1 ) {
         } else {
             fprintf(stderr, "%s: [ERROR] \"%s\" file does not exist or is not readble!\n", name, inputFile);
@@ -65,10 +69,23 @@ int main(int argc, char *argv[]) {
     printf("name=%s; keyword=%s, ignoreCase=%d; optdiff=%d;\noutputFlag=%d;\toutputFile=%s;\ninputFlag=%d;\tintputFile=%s;\n", name, keyword, ignoreCase, argc-optind, outputFlag, outputFile, inputFlag, inputFile);
 
     //TODO: set up reading from file/s or stdin
+    if(ignoreCase == 0) {
+        for(int i = 0; keyword[i]; i++){
+            keyword[i] = tolower(keyword[i]);
+        }
+    }
     FILE* fp_read;
     FILE* fp_write;
     if(!inputFlag) {
-       fp_read = stdin;
+        fp_read = stdin;
+    }
+    if(!outputFlag) {
+        fp_write = stdout;
+    } else {
+        fp_write = fopen(outputFile, "w");
+        if(fp_write == NULL) {
+            exit(EXIT_FAILURE);
+        }
     }
 
     while(optind < argc || (inputFlag == 0) ) {
@@ -84,13 +101,18 @@ int main(int argc, char *argv[]) {
 
         while ((read = getline(&line, &len, fp_read)) != -1) {
             printf("Retrieved line of length %zu :\n", read);
-            printf("%s", line);
             if( (!inputFlag) && strlen(line) == 1 ) {
                 inputFlag=1; // to exit while loop;
                 break;
             }
+            if(ignoreCase == 0) {
+                for(int i = 0; line[i]; i++){
+                    line[i] = tolower(line[i]);
+                }
+            }
+            printf("debug:\n\t%s\n\t%s\n", line, keyword);
             if(strstr(line, keyword)) {
-                printf("%s: ^^^^^^ contains %s\n", name, keyword); // print stuff
+                fprintf(fp_write, "XXX: %s", line); // print stuff
             }
         }
         free(line);
