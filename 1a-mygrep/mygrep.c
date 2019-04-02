@@ -16,6 +16,8 @@ void usage() {
 }
 
 int main(int argc, char *argv[]) {
+
+    // HANDLE ARGUMENTS
     int opt;
     name = argv[0];
     while ((opt = getopt(argc, argv, "o:i")) != -1) {
@@ -23,6 +25,13 @@ int main(int argc, char *argv[]) {
             case 'o':
                 outputFlag = 1;
                 outputFile = optarg;
+                if( !access( outputFile, R_OK|W_OK) != -1 ) {
+                    FILE *fp = fopen(outputFile, "wb");
+                    if (!fp) { 
+                        fprintf(stderr, "%s: [ERROR] could not create or open file \"%s\" to write results into!\n", name, outputFile);
+                        usage();
+                    } 
+                } 
                 break;
             case 'i':
                 ignoreCase = 0;
@@ -32,15 +41,24 @@ int main(int argc, char *argv[]) {
         }
     }
 
-    if (optind < argc) {
-        //TODO: check that file exists
+    int optindOrig = optind;
+    while (optind < argc) {
         inputFlag = 1;
+        // Check if inputFiles are readable;
         inputFile = argv[optind++];
+        printf(inputFile);
+        printf("\n");
+        if( access( inputFile, F_OK|R_OK ) != -1 ) {
+        } else {
+            fprintf(stderr, "%s: [ERROR] \"%s\" file does not exist or is not readble!\n", name, inputFile);
+            usage();
+        } 
     }
+    optind = optindOrig;
+    //TODO: set up reading from file/s or stdin
 
     printf("name=%s; ignoreCase=%d; optind=%d;\noutputFlag=%d;\toutputFile=%s;\ninputFlag=%d;\tintputFile=%s;\n", name, ignoreCase, optind, outputFlag, outputFile, inputFlag, inputFile);
 
-    //TODO: set up reading from file/s or stdin
     //TODO: grep stuff and return it to file or stdout
     exit(EXIT_SUCCESS);
 }
