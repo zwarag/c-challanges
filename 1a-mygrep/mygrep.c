@@ -62,7 +62,7 @@ int main(int argc, char *argv[]) {
         } 
     }
     optind = optindOrig;
-    printf("name=%s; keyword=%s, ignoreCase=%d; optind=%d;\noutputFlag=%d;\toutputFile=%s;\ninputFlag=%d;\tintputFile=%s;\n", name, keyword, ignoreCase, optind, outputFlag, outputFile, inputFlag, inputFile);
+    printf("name=%s; keyword=%s, ignoreCase=%d; optdiff=%d;\noutputFlag=%d;\toutputFile=%s;\ninputFlag=%d;\tintputFile=%s;\n", name, keyword, ignoreCase, argc-optind, outputFlag, outputFile, inputFlag, inputFile);
 
     //TODO: set up reading from file/s or stdin
     if(inputFlag) {
