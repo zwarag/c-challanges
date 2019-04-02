@@ -25,7 +25,7 @@ int main(int argc, char *argv[]) {
             case 'o':
                 outputFlag = 1;
                 outputFile = optarg;
-                if( !access( outputFile, R_OK|W_OK) != -1 ) {
+                if( !access( outputFile, F_OK|W_OK) != -1 ) {
                     FILE *fp = fopen(outputFile, "wb");
                     if (!fp) { 
                         fprintf(stderr, "%s: [ERROR] could not create or open file \"%s\" to write results into!\n", name, outputFile);
