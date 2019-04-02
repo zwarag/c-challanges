@@ -1,2 +1,4 @@
 */**/*.swp
+*/**/*.o
 */**/.nfs*
+1a-mygrep/mygrep
