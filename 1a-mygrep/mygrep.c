@@ -7,6 +7,7 @@ static char* name;
 static int ignoreCase = 1;
 static int inputFlag  = 0;
 static int outputFlag = 0;
+static char* keyword;
 static char* inputFile;
 static char* outputFile;
 
@@ -41,6 +42,12 @@ int main(int argc, char *argv[]) {
         }
     }
 
+    if(optind < argc) {
+        keyword = argv[optind++];
+    } else { // no keword 
+        usage();
+    }
+
     int optindOrig = optind;
     while (optind < argc) {
         inputFlag = 1;
@@ -55,9 +62,30 @@ int main(int argc, char *argv[]) {
         } 
     }
     optind = optindOrig;
-    //TODO: set up reading from file/s or stdin
+    printf("name=%s; keyword=%s, ignoreCase=%d; optind=%d;\noutputFlag=%d;\toutputFile=%s;\ninputFlag=%d;\tintputFile=%s;\n", name, keyword, ignoreCase, optind, outputFlag, outputFile, inputFlag, inputFile);
 
-    printf("name=%s; ignoreCase=%d; optind=%d;\noutputFlag=%d;\toutputFile=%s;\ninputFlag=%d;\tintputFile=%s;\n", name, ignoreCase, optind, outputFlag, outputFile, inputFlag, inputFile);
+    //TODO: set up reading from file/s or stdin
+    if(inputFlag) {
+        while(optind < argc) {
+            FILE* fp;
+            char *line = NULL;
+            size_t len = 0;
+            ssize_t read;
+
+            fp = fopen(argv[optind++], "r");
+            if (fp == NULL)
+                exit(EXIT_FAILURE);
+
+            while ((read = getline(&line, &len, fp)) != -1) {
+                printf("Retrieved line of length %zu :\n", read);
+                printf("%s", line);
+                if(strstr(line, keyword)) {
+                        printf("%s: ^^^^^^ contains %s\n", name, keyword);
+                }
+            }
+            free(line);
+        }
+    }
 
     //TODO: grep stuff and return it to file or stdout
     exit(EXIT_SUCCESS);
