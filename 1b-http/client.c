@@ -21,6 +21,7 @@ static char *name;
 static int opt;
 static int fileFlag = 0;
 static int dirFlag = 0;
+static char port80[3] = "80";
 static char *port;
 static char *filePath;
 static char *dirPath;
@@ -33,11 +34,9 @@ static char *host;
  * @details This function will clean up all remaining allocations.
  */
 void cleanUp() {
-    if(port == NULL)
-        free(port);
-    if(host == NULL)
+    if(host != NULL)
         free(host);
-    if(req == NULL)
+    if(req != NULL)
         free(req);
 }
 
@@ -83,7 +82,7 @@ void readArgs(int argc, char **argv) {
     while((opt = getopt(argc, argv, "p:o:d:")) != -1) {
         switch(opt) {
             case 'p':
-                port = strdup(optarg);
+                port = optarg;
                 char *endpnt;
                 int portnr = strtol(port, &endpnt, 10);
                 if((endpnt == '\0') || ((portnr < 1) || (portnr > 49151))) {
@@ -92,11 +91,11 @@ void readArgs(int argc, char **argv) {
                 }
                 break;
             case 'o':
-                filePath = strdup(optarg);
+                filePath = optarg;
                 fileFlag = 1;
                 break;
             case 'd':
-                dirPath = strdup(optarg);
+                dirPath = optarg;
                 dirFlag = 1;
                 break;
             default: /* '?' */
@@ -109,9 +108,9 @@ void readArgs(int argc, char **argv) {
     }
 
     if(port == NULL)
-        port = strdup("80");
+        port = port80;
 
-    url = strdup(argv[optind]);
+    url = argv[optind];
     if(filePath != NULL && dirPath != NULL) {
         fprintf(stderr, "%s: Both, file and direcotry paths are set. Remove one!\n", name);
         usage();	
@@ -268,12 +267,12 @@ int connectToServer() {
         close(connection);
     }
 
+    freeaddrinfo(result);
     if (rp == NULL) { /* No address succeeded */
         fprintf(stderr,"%s: Could not connect to host\n", name);
         cleanUp();
         exit(EXIT_FAILURE);
     }
-    freeaddrinfo(result);
 
     return connection;
 }
@@ -353,6 +352,7 @@ void checkFirstLine(char *pnt) {
     HTTPVersion[8] = '\0';
     if((strcmp(HTTPVersion, "HTTP/1.1")) != 0) {
         fprintf(stderr, "%s: Protocol error!\n", name);
+        free(pnt);
         cleanUp();
         exit(2);
     }
@@ -366,6 +366,7 @@ void checkFirstLine(char *pnt) {
     sc = strtol(statuscode, &endpnt, 10);
     if((sc < 100) || (sc > 511)) {
         fprintf(stderr, "%s: Protocol Error!\n", name);
+        free(pnt);
         cleanUp();
         exit(2);
     }
@@ -381,6 +382,7 @@ void checkFirstLine(char *pnt) {
             fprintf(stderr, "%s", msg);
         }
         fprintf(stderr, "\n");
+        free(pnt);
         cleanUp();
         exit(3);
     }	
@@ -417,12 +419,14 @@ int main (int argc, char **argv) {
     int linelen = 0;
     int firstLine = 0;
     for(;;) {
-        if ((linelen = fgetline(con, &line)) <= 1)
+        if ((linelen = fgetline(con, &line)) <= 1) {
             break;
+        }
         if (firstLine == 0)
             checkFirstLine(line);
 
         free(line);
+        line=NULL;
         firstLine = 1;
     }
     free(line);
