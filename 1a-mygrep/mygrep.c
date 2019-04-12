@@ -12,11 +12,25 @@ static char* keyword;
 static char* inputFile;
 static char* outputFile;
 
+static int debug = 0;
+
+/**
+ * Mandatory usage function.
+ * @brief This function writes helpful usage information about the program to stderr.
+ * @returns void
+ */
 void usage() {
     fprintf(stderr, "SYNOPSIS\n\tmygrep [-i] [-o outfile] keyword [file...]\n");
     exit(EXIT_FAILURE);
 }
 
+/**
+ * Main program function.
+ * @brief Will read input (file or stdin) and filter lines that contain the searched keyword.
+ * @param argc The argument counter.
+ * @param argv A list of Arguments.
+ * @returns void
+ */
 int main(int argc, char *argv[]) {
 
     // HANDLE ARGUMENTS
@@ -45,20 +59,15 @@ int main(int argc, char *argv[]) {
 
     if(optind < argc) {
         keyword = argv[optind++];
-        //printf("\n\n\n\n%s\n\n\n\n", keyword);
     } else { // no keword 
         usage();
     }
-
-    //printf("\n\n\n\n%s\n\n\n\n", keyword);
 
     int optindOrig = optind;
     while (optind < argc) {
         inputFlag = 1;
         // Check if inputFiles are readable;
         inputFile = argv[optind++];
-        //printf(inputFile);
-        //printf("\n");
         if( access( inputFile, F_OK|R_OK ) != -1 ) {
         } else {
             fprintf(stderr, "%s: [ERROR] \"%s\" file does not exist or is not readble!\n", name, inputFile);
@@ -66,9 +75,11 @@ int main(int argc, char *argv[]) {
         } 
     }
     optind = optindOrig;
-    printf("name=%s; keyword=%s, ignoreCase=%d; optdiff=%d;\noutputFlag=%d;\toutputFile=%s;\ninputFlag=%d;\tintputFile=%s;\n", name, keyword, ignoreCase, argc-optind, outputFlag, outputFile, inputFlag, inputFile);
+    if(debug == 1) {
+        printf("name=%s; keyword=%s, ignoreCase=%d; optdiff=%d;\noutputFlag=%d;\toutputFile=%s;\ninputFlag=%d;\tintputFile=%s;\n", name, keyword, ignoreCase, argc-optind, outputFlag, outputFile, inputFlag, inputFile);
+    }
 
-    //TODO: set up reading from file/s or stdin
+    // SETUP Read and Write ends.
     if(ignoreCase == 0) {
         for(int i = 0; keyword[i]; i++){
             keyword[i] = tolower(keyword[i]);
@@ -88,8 +99,10 @@ int main(int argc, char *argv[]) {
         }
     }
 
+    // MAIN GREP LOOP
     while(optind < argc || (inputFlag == 0) ) {
         char *line = NULL;
+        char *origLine = NULL;
         size_t len = 0;
         ssize_t read;
 
@@ -98,26 +111,29 @@ int main(int argc, char *argv[]) {
             if (fp_read == NULL)
                 exit(EXIT_FAILURE);
         }
-
-        while ((read = getline(&line, &len, fp_read)) != -1) {
-            printf("Retrieved line of length %zu :\n", read);
+        while ((read = getline(&line, &len, fp_read)) != -1) { // read from file/stdin
             if( (!inputFlag) && strlen(line) == 1 ) {
                 inputFlag=1; // to exit while loop;
                 break;
+            }
+            origLine = strdup(line);
+            if(origLine == NULL) {
+                exit(EXIT_FAILURE);
             }
             if(ignoreCase == 0) {
                 for(int i = 0; line[i]; i++){
                     line[i] = tolower(line[i]);
                 }
             }
-            printf("debug:\n\t%s\n\t%s\n", line, keyword);
             if(strstr(line, keyword)) {
-                fprintf(fp_write, "XXX: %s", line); // print stuff
+                fprintf(fp_write, "%s", origLine); // write match to file/stdout
             }
         }
+        free(origLine);
         free(line);
     }
+    fclose(fp_write);
+    fclose(fp_read);
 
-    //TODO: grep stuff and return it to file or stdout
     exit(EXIT_SUCCESS);
 }
