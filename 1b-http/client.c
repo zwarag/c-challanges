@@ -5,7 +5,7 @@
  * 
  * @brief HTTP Client Software
  * 
- * This Program allows to load Files from HTTP Server supporting HTTP/1.1.
+ * @detail: This Program allows to load Files from HTTP Server supporting HTTP/1.1.
  **/
 
 #include <stdio.h>
@@ -18,22 +18,23 @@
 
 static char *name;
 
-static int opt;
-static int fileFlag = 0;
-static int dirFlag = 0;
-static char port80[3] = "80";
-static char *port;
-static char *filePath;
-static char *dirPath;
-static char *url;
-static char *req;
-static char *host;
+static int fileFlag = 0;        /*!< is set when the user wants to write to a file */
+static int dirFlag = 0;         /*!< is set when the user want to write to a folder */ 
+static char port80[3] = "80";   /*!< will be used when the user does not set custom port */
+static char *port;              /*!< default: 80 or other if set by `-p` */
+static char *filePath;          /*!< where the recived data will be written */
+static char *dirPath;           /*!< folder path of where data should be written to */
+static char *url;               /*!< request url */
+static char *req;               /*!< request string */
+static char *host;              /*!< request host */
 
 /**
  * @brief clean up function.
  * @details This function will clean up all remaining allocations.
+ * @return void
+ * @param void
  */
-void cleanUp() {
+void cleanUp(void) {
     if(host != NULL)
         free(host);
     if(req != NULL)
@@ -42,9 +43,12 @@ void cleanUp() {
 
 /**
  * Mandatory usage function.
- * @brief This function writes helpful usage information about the program to stderr.
+ * @brief This function prints the synopsis.
+ * @detail This function writes helpful usage information about the program to stderr.
+ * @return void
+ * @param void
  */
-void usage() {
+void usage(void) {
     cleanUp();
     fprintf(stderr, "SYNOPSIS\n\t\tclient [-p PORT] [ -o FILE | -d DIR ] URL\n\tEXAMPLE\n\t\tclient http://pan.vmars.tuwien.ac.at/osue/\n");
     exit(EXIT_FAILURE);
@@ -77,8 +81,10 @@ int findLastOccurence(char *pnt, char search) {
  * @details Attempts to map all given arguments to the needed variables and pointers.
  * @param argc Number of arguments..
  * @param argv Argument Vector.
+ * @return void
  */
 void readArgs(int argc, char **argv) {
+    int opt;
     while((opt = getopt(argc, argv, "p:o:d:")) != -1) {
         switch(opt) {
             case 'p':
@@ -150,12 +156,13 @@ int findNthOccurence(char *s, char c, int n) {
  * @brief Extract the file from the URL.
  * @details Returns a pointer from where the file path starts.
  * @return A pointer pointing to the beginning of the filePath.
+ * @param void
  */
-char *fileFromURL() {
+char *fileFromURL(void) {
     char *retVal;
     int from = findNthOccurence(url, '/', 3);	
     if(from < 0) {
-        fprintf(stderr, "The provided URL is not conform!\n");
+        fprintf(stderr, "%s: The provided URL is not conform!\n", name);
         usage();
     }
     retVal = url+from;
@@ -166,12 +173,14 @@ char *fileFromURL() {
 /**
  * @brief Extract the host from the URL.
  * @details Sets the global host variable to the omitted Host.
+ * @return void
+ * @param void
  */
-void hostFromURL() {
+void hostFromURL(void) {
     int from = findNthOccurence(url, '/', 2);
     int to   = findNthOccurence(url, '/', 3);
     if((from < to) && (from < 0 || to < 1)) {
-        fprintf(stderr, "The provided URL is not conform!\n");
+        fprintf(stderr, "%s: The provided URL is not conform!\n", name);
         usage();
     }
     host = strndup(url+from+1, to-from-1);
@@ -180,15 +189,17 @@ void hostFromURL() {
 /**
  * @brief Build the request header.
  * @details When all data is set. This function will merge all components into the global 'req' variable.
+ * @return void
+ * @param void
  */
-void buildRequest() {
+void buildRequest(void) {
     char *method = strdup("GET");
     char *file = fileFromURL();
     char *HTTPVersion = strdup("HTTP/1.1");
     hostFromURL();
 
     if(host == NULL) {
-        fprintf(stderr, "Cannot find host in arguments\n");
+        fprintf(stderr, "%s: Cannot find host in arguments\n", name);
         free(method);
         free(HTTPVersion);
         cleanUp();
@@ -196,7 +207,7 @@ void buildRequest() {
     }
 
     if(method == NULL || file == NULL || HTTPVersion == NULL || host == NULL) {
-        fprintf(stderr, "The provided URL is not valid!\n");
+        fprintf(stderr, "%s: The provided URL is not valid!\n", name);
         free(method);
         free(HTTPVersion);
         usage();
@@ -207,7 +218,7 @@ void buildRequest() {
     if( size > 0 ) {
         req = (char *)malloc(size + 1 + (19*sizeof(char)));
         if(req == NULL) {
-            fprintf(stderr, "%s: Memory error!", name);
+            fprintf(stderr, "%s: Memory error!\n", name);
             cleanUp();
             exit(EXIT_FAILURE);
         }
@@ -231,8 +242,9 @@ void buildRequest() {
  * @brief Connect to Server over Socket.
  * @details This function will create a socket, bind it, listen on it and start accepting connections.
  * @return created Socket ID.
+ * @param void
  */
-int connectToServer() {
+int connectToServer(void) {
     int connection;
     struct addrinfo hints;
     struct addrinfo *result, *rp;
@@ -247,7 +259,7 @@ int connectToServer() {
 
     s = getaddrinfo(host, port, &hints, &result);
     if (s != 0 ) {
-        fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(s));
+        fprintf(stderr, "%s: getaddrinfo: %s\n", name, gai_strerror(s));
         cleanUp();
         exit(EXIT_FAILURE);
     }
@@ -255,7 +267,7 @@ int connectToServer() {
     for (rp = result; rp != NULL; rp = rp->ai_next) {
         connection = socket(rp->ai_family, rp->ai_socktype, rp->ai_protocol);
         if (connection == -1) {
-            fprintf(stderr,"socket error");
+            fprintf(stderr,"%s: socket error! \n", name);
             cleanUp();
             exit(EXIT_FAILURE);
         }
@@ -344,6 +356,7 @@ int fgetline(int con, char **pnt) {
  * @brief Validates the first line of a response header.
  * @details This function goes throu the first line of a response Header and will check if it complies with requirements given for this task. 
  * @param pnt A pointer pointing to the first Line of a response Header.
+ * @return void
  */
 void checkFirstLine(char *pnt) {
     // Check if begin of line equals "HTTP/1.1"
