@@ -1,3 +1,13 @@
+/**
+ * @file mygrep.c
+ * @author Harrys Kavan <e1529309@student.tuwien.ac.at>
+ * @date 12.04.2019
+ * 
+ * @brief filters STDIN or multiple Files for a keyword. 
+ * 
+ * This Program allows to filter a input for a keyword.
+ **/
+
 #include <unistd.h>
 #include <stdlib.h>
 #include <string.h>
