@@ -375,8 +375,35 @@ int main (int argc, char **argv) {
 
         if(headerError == -1) {
             //TODO: respond with HTTP Error and so on.
+            time_t t = time(NULL);
+            struct tm* tm_info;
+            int tBufLen = 40;
+            char date[tBufLen];
+            memset(date, 0, tBufLen+1);
+            tm_info = gmtime(&t);
+            strftime(date, 38, "Date: %a, %d %b %y %H:%M:%S GMT\r\n", tm_info);
             fprintf(stdout, "%s: %s %s\n", name, resStatusCode, resMsg);
-            //send(header, body);
+
+            char *HTTPVersion = "HTTP/1.1 ";
+            char *conClose = "Connection: Close\r\n\r\n";
+            int resHeaderLen = strlen(HTTPVersion) + strlen(resStatusCode) + strlen(resMsg) + strlen(date) + strlen(conClose);
+
+            resHeader = (char *)malloc(resHeaderLen+2);
+            if(resHeader == NULL) {
+                fprintf(stderr, "%s: Memory error!", name);
+                cleanUp();
+                exit(EXIT_FAILURE);
+            }
+            memset(resHeader, 0, resHeaderLen+2);
+            snprintf(resHeader, resHeaderLen+1, "%s%s%s%s%s", HTTPVersion, resStatusCode, resMsg, date, conClose);
+
+            //SEND HEADER
+            if (write(con, resHeader, strlen(resHeader)+1) != strlen(resHeader)+1) {
+                fprintf(stderr, "%s: Error while sending request.\n", name);
+                cleanUp();
+                exit(EXIT_FAILURE);
+            }
+
         } else {
             //DATE
             time_t t = time(NULL);
@@ -398,22 +425,27 @@ int main (int argc, char **argv) {
             resMsg = "OK\r\n";
             fseek( f, 0L, SEEK_END );
             size_t contentLen = ftell(f); //should always be > 0 because checkFirstLine()
+            fprintf(stderr, "%s: contentLen = %ld\n", name, contentLen);
             fseek( f, 0L, SEEK_SET );
             int contentLenInt = snprintf( NULL, 0, "%ld", contentLen);
-            char resContentSize[(14 + contentLenInt + 5)];
-            snprintf(resContentSize, (14 + contentLenInt + 4), "Content-Size: %ld\r\n", contentLen);
+            fprintf(stderr, "%s: contentLenInt = %d\n", name, contentLenInt);
+            char resContentSize[(14 + contentLenInt + 3)];
+            memset(resContentSize, 0, 14 + contentLenInt + 3);
+            snprintf(resContentSize, (14 + contentLenInt + 3), "Content-Size: %ld\r\n", contentLen);
 
             char *HTTPVersion = "HTTP/1.1 ";
             char *conClose = "Connection: Close\r\n\r\n";
-            int resHeaderLen = strlen(HTTPVersion) + strlen(resStatusCode) + strlen(resMsg) + strlen(date) + strlen(resContentSize) + strlen(conClose)+5;
-            resHeader = (char *)malloc(resHeaderLen);
+            int resHeaderLen = strlen(HTTPVersion) + strlen(resStatusCode) + strlen(resMsg) + strlen(date) + strlen(resContentSize) + strlen(conClose);
+            fprintf(stderr, "%s: resHeaderLen = %d\n", name, resHeaderLen);
+            resHeader = (char *)malloc(resHeaderLen+1);
             if(resHeader == NULL) {
                 fprintf(stderr, "%s: Memory error!", name);
                 cleanUp();
                 exit(EXIT_FAILURE);
             }
-            memset(resHeader, 0, resHeaderLen);
-            snprintf(resHeader, resHeaderLen-1, "%s%s%s%s%s%s", HTTPVersion, resStatusCode, resMsg, date, resContentSize, conClose);
+            memset(resHeader, 0, resHeaderLen+1);
+            snprintf(resHeader, resHeaderLen, "%s%s%s%s%s%s", HTTPVersion, resStatusCode, resMsg, date, resContentSize, conClose);
+
 
             //SEND HEADER
             if (write(con, resHeader, strlen(resHeader)+1) != strlen(resHeader)+1) {
