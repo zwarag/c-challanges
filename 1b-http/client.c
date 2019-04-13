@@ -445,7 +445,7 @@ int main (int argc, char **argv) {
     free(line);
 
 
-    if(fileFlag == 1 || dirFlag == 1) {
+    if(fileFlag == 1 || dirFlag == 1) { // file or folder
 
         int filePathLen = 0;
         int dirPathLen = 0;
@@ -488,6 +488,13 @@ int main (int argc, char **argv) {
             fprintf(f, "%c", ch);
         }
 
+        shutdown(con, SHUT_WR);
+        void* ttest = NULL;
+        size_t siz = 0;
+        if(read(con, &ttest, siz) < 0) {
+            //TODO: ERR 
+        }
+
         fclose(sockfile);
         fclose(f);
         close(con);
@@ -505,13 +512,13 @@ int main (int argc, char **argv) {
         void* ttest = NULL;
         size_t siz = 0;
         if(read(con, &ttest, siz) < 0) {
-
+            //TODO: ERR 
         }
 
 
         fclose(sockfile);
         close(con);
-        
+
     }
 
     cleanUp();
