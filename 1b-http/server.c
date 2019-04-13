@@ -289,6 +289,7 @@ int checkFirstLine(char *line) {
         int reqPathLen = strlen(docRoot); 
         if(reqUrl[reqUrlLen-1] == '/') { // /folder/
             //TODO: Maybe set indexFile to index.html?
+            indexFile = "index.html";
             reqPathLen += reqUrlLen;
             reqPathLen += strlen(indexFile);
         } else { // /file
@@ -487,10 +488,6 @@ int main (int argc, char **argv) {
 
             shutdown(con, SHUT_WR);
 
-            //ch = EOF;
-            //if((write(con, &ch, 1)) != 1) {
-            //    fprintf(stderr, "%s: Could not send all data to client!\n", name);
-            //}
             fprintf(stderr, "%s: done writing data!\n", name);
         }
         close(con);
