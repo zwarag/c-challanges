@@ -258,7 +258,7 @@ int checkFirstLine(char *line) {
     get[4] = '\0';
     if((strcmp(get, "GET ")) != 0) {
         resStatusCode = "501 ";
-        resMsg  = "Not implemented\r\n";
+        resMsg  = "(Not implemented)\r\n";
         return -1;
     }
 
@@ -318,7 +318,7 @@ int checkFirstLine(char *line) {
     if (access(reqPath, R_OK) == -1) {
         fprintf(stdout, "%s: Requested file '%s' does not exist!\n", name, reqPath);
         resStatusCode = "404 ";
-        resMsg = "File not found\r\n";
+        resMsg = "(Not Found)\r\n";
         return -1;
     }
 
