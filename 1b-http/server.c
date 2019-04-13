@@ -382,23 +382,22 @@ int main (int argc, char **argv) {
             memset(date, 0, tBufLen+1);
             tm_info = gmtime(&t);
             strftime(date, 38, "Date: %a, %d %b %y %H:%M:%S GMT\r\n", tm_info);
-            fprintf(stdout, "%s: %s %s\n", name, resStatusCode, resMsg);
 
             char *HTTPVersion = "HTTP/1.1 ";
             char *conClose = "Connection: Close\r\n\r\n";
             int resHeaderLen = strlen(HTTPVersion) + strlen(resStatusCode) + strlen(resMsg) + strlen(date) + strlen(conClose);
 
-            resHeader = (char *)malloc(resHeaderLen+2);
+            resHeader = (char *)malloc(resHeaderLen+1);
             if(resHeader == NULL) {
                 fprintf(stderr, "%s: Memory error!", name);
                 cleanUp();
                 exit(EXIT_FAILURE);
             }
-            memset(resHeader, 0, resHeaderLen+2);
+            memset(resHeader, 0, resHeaderLen+1);
             snprintf(resHeader, resHeaderLen+1, "%s%s%s%s%s", HTTPVersion, resStatusCode, resMsg, date, conClose);
 
             //SEND HEADER
-            if (write(con, resHeader, strlen(resHeader)+1) != strlen(resHeader)+1) {
+            if (write(con, resHeader, strlen(resHeader)) != strlen(resHeader)) {
                 fprintf(stderr, "%s: Error while sending request.\n", name);
                 cleanUp();
                 exit(EXIT_FAILURE);
