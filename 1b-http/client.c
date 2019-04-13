@@ -488,9 +488,9 @@ int main (int argc, char **argv) {
             fprintf(f, "%c", ch);
         }
 
-        close(con);
-        fclose(f);
         fclose(sockfile);
+        fclose(f);
+        close(con);
 
         free(writePath);
     } else {
@@ -498,9 +498,20 @@ int main (int argc, char **argv) {
         FILE *sockfile = (FILE *) fdopen(con, "r");
         int ch;
 
-        while ((ch = fgetc(sockfile)) != EOF) {
+        while ((ch = fgetc(sockfile)) > 0) {
             fprintf(stdout, "%c", ch);
         }
+        shutdown(con, SHUT_WR);
+        void* ttest = NULL;
+        size_t siz = 0;
+        if(read(con, &ttest, siz) < 0) {
+
+        }
+
+
+        fclose(sockfile);
+        close(con);
+        
     }
 
     cleanUp();

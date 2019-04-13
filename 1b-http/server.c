@@ -141,7 +141,7 @@ void validateArgs(void) {
  * @details This function will create a socket, bind it, listen on it and start accepting connections.
  * @return created Socket ID.
  */
-int connectToServer() {
+int connectToServer(void) {
     //TODO: why is this connectToServer???
     struct addrinfo hints, *ai;
 
@@ -416,26 +416,25 @@ int main (int argc, char **argv) {
             //CONTENT LENGTH
             FILE *f = fopen(reqPath, "rb");
             if (f == NULL) {
-                fprintf(stderr, "%s: Error reading file!\n", name);
+                fprintf(stderr, "%s: Error reading file!\n", name); // 404?
                 cleanUp();
                 exit(EXIT_FAILURE);
             }
-            resStatusCode = "200 ";
-            resMsg = "OK\r\n";
+
             fseek( f, 0L, SEEK_END );
-            size_t contentLen = ftell(f); //should always be > 0 because checkFirstLine()
-            fprintf(stderr, "%s: contentLen = %ld\n", name, contentLen);
-            fseek( f, 0L, SEEK_SET );
-            int contentLenInt = snprintf( NULL, 0, "%ld", contentLen);
-            fprintf(stderr, "%s: contentLenInt = %d\n", name, contentLenInt);
+            long contentLen = ftell(f); //should always be > 0 because checkFirstLine()
+            rewind(f);
+
+            int contentLenInt = snprintf( NULL, 0, "%ld", contentLen); // Assuming file is not larger then 3.2 MB
             char resContentSize[(14 + contentLenInt + 3)];
             memset(resContentSize, 0, 14 + contentLenInt + 3);
             snprintf(resContentSize, (14 + contentLenInt + 3), "Content-Size: %ld\r\n", contentLen);
 
+            resStatusCode = "200 ";
+            resMsg = "OK\r\n";
             char *HTTPVersion = "HTTP/1.1 ";
             char *conClose = "Connection: Close\r\n\r\n";
             int resHeaderLen = strlen(HTTPVersion) + strlen(resStatusCode) + strlen(resMsg) + strlen(date) + strlen(resContentSize) + strlen(conClose);
-            fprintf(stderr, "%s: resHeaderLen = %d\n", name, resHeaderLen);
             resHeader = (char *)malloc(resHeaderLen+1);
             if(resHeader == NULL) {
                 fprintf(stderr, "%s: Memory error!", name);
@@ -443,38 +442,59 @@ int main (int argc, char **argv) {
                 exit(EXIT_FAILURE);
             }
             memset(resHeader, 0, resHeaderLen+1);
-            snprintf(resHeader, resHeaderLen, "%s%s%s%s%s%s", HTTPVersion, resStatusCode, resMsg, date, resContentSize, conClose);
+            snprintf(resHeader, resHeaderLen+1, "%s%s%s%s%s%s", HTTPVersion, resStatusCode, resMsg, date, resContentSize, conClose);
 
 
             //SEND HEADER
-            if (write(con, resHeader, strlen(resHeader)+1) != strlen(resHeader)+1) {
+            if (write(con, resHeader, strlen(resHeader)) != strlen(resHeader)) {
                 fprintf(stderr, "%s: Error while sending request.\n", name);
                 cleanUp();
                 exit(EXIT_FAILURE);
             }
 
-            //SEND FILE
+            //READ FILE
+            char *resBody;
+            size_t n = 0;
             int ch;
+
+            resBody = malloc(contentLen); // TODO CHECK
+
             while((ch = fgetc(f)) != EOF) {
                 if(ch < 0) {
-                    fprintf(stdout,"%s: Error transmitting data!\n", name);
+                    fprintf(stderr,"%s: Error transmitting data!\n", name); // TODO: ???
                 }
-                if((write(con, &ch, 1)) != 1) {
-                    fprintf(stdout, "%s: Could not send all data to client!\n", name);
-                    break;
-                }
+                fprintf(stderr, "%c", ch);
+                resBody[n++]  = (char)ch;
             }
-            ch = EOF;
-            if((write(con, &ch, 1)) != 1) {
-                fprintf(stdout, "%s: Could not send all data to client!\n", name);
-            }
+            resBody[n]  = '\0';
             fclose(f);
 
+            //SEND FILE
+            char* resBodyPnt = resBody;
+            ssize_t ret;
+            size_t toWrite = contentLen;
+            while(toWrite > 0) {
+                do {
+                    ret = write(con, resBodyPnt, toWrite);
+                } while ((ret < 0) && (errno == EINTR || errno == EAGAIN || errno == EWOULDBLOCK));
+                if(ret < 0) {
+                    fprintf(stderr,"%s: Error transmitting data!\n", name); // TODO: ???
+                    exit(EXIT_FAILURE);
+                }
+                toWrite -= ret;
+                resBodyPnt += ret;
+            }
+
+            shutdown(con, SHUT_WR);
+
+            //ch = EOF;
+            //if((write(con, &ch, 1)) != 1) {
+            //    fprintf(stderr, "%s: Could not send all data to client!\n", name);
+            //}
+            fprintf(stderr, "%s: done writing data!\n", name);
         }
         close(con);
         con = accept(sockfd, NULL, NULL);
-
     }
     cleanUp();
-
 }
