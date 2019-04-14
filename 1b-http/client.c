@@ -193,23 +193,19 @@ void hostFromURL(void) {
  * @param void
  */
 void buildRequest(void) {
-    char *method = strdup("GET");
+    char *method = "GET";
     char *file = fileFromURL();
-    char *HTTPVersion = strdup("HTTP/1.1");
+    char *HTTPVersion = "HTTP/1.1";
     hostFromURL();
 
     if(host == NULL) {
         fprintf(stderr, "%s: Cannot find host in arguments\n", name);
-        free(method);
-        free(HTTPVersion);
         cleanUp();
         exit(EXIT_FAILURE);
     }
 
     if(method == NULL || file == NULL || HTTPVersion == NULL || host == NULL) {
         fprintf(stderr, "%s: The provided URL is not valid!\n", name);
-        free(method);
-        free(HTTPVersion);
         usage();
     }
 
@@ -225,16 +221,9 @@ void buildRequest(void) {
         snprintf(req, size+1+ (19*sizeof(char)), "%s %s %s\r\nHost: %s\r\nConnection: close\r\n\r\n", method, file, HTTPVersion, host);
     } else {
         fprintf(stderr, "%s: Cannot get size of request String\n", name);
-        free(method);
-        free(HTTPVersion);
         cleanUp();
         exit(EXIT_FAILURE);
     }
-
-    if(method != NULL)
-        free(method);
-    if(HTTPVersion != NULL)
-        free(HTTPVersion);	
 
 }
 
@@ -458,17 +447,12 @@ int main (int argc, char **argv) {
         writePath = (char *)malloc(bufferSize);
         if(writePath == NULL) {
             fprintf(stderr, "%s: Memory error!", name);
-            cleanUp();
             exit(EXIT_FAILURE);
         }
         memset(writePath, 0, bufferSize);
         if(dirPathLen > 0) {
             strncat(writePath, dirPath, dirPathLen+1);
             strncat(writePath, "/\0", 2);
-        }
-        if(filePathLen < 1) {
-            fprintf(stderr, "%s: this should never happen\n", name);
-            exit(EXIT_FAILURE);
         }
         strncat(writePath, filePath, filePathLen);
         if(writePath == NULL) {
@@ -488,15 +472,18 @@ int main (int argc, char **argv) {
             fprintf(f, "%c", ch);
         }
 
+        // tell server read is done!
         shutdown(con, SHUT_WR);
         void* ttest = NULL;
         size_t siz = 0;
         if(read(con, &ttest, siz) < 0) {
-            //TODO: ERR 
+            fprintf(stderr, "%s: socket error!", name);
+            exit(EXIT_FAILURE);
         }
 
         fclose(sockfile);
         fclose(f);
+        shutdown(con, SHUT_RDWR);
         close(con);
 
         free(writePath);
@@ -512,11 +499,13 @@ int main (int argc, char **argv) {
         void* ttest = NULL;
         size_t siz = 0;
         if(read(con, &ttest, siz) < 0) {
-            //TODO: ERR 
+            fprintf(stderr, "%s: socket error!", name);
+            exit(EXIT_FAILURE);
         }
 
 
         fclose(sockfile);
+        shutdown(con, SHUT_RDWR);
         close(con);
 
     }
