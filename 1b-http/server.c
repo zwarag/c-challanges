@@ -144,7 +144,7 @@ void validateArgs(void) {
  * @details This function will create a socket, bind it, listen on it and start accepting connections.
  * @return created Socket ID.
  */
-int createConnection(void) {
+void createConnection(void) {
     struct addrinfo hints, *ai;
 
     memset(&hints, 0, sizeof hints);
@@ -181,8 +181,7 @@ int createConnection(void) {
         cleanUp();
         exit(EXIT_FAILURE);
     }
-    int retVal = accept(sockfd, NULL, NULL);
-    return retVal;
+    
 }
 
 /**
@@ -356,14 +355,7 @@ int main (int argc, char **argv) {
 
     readArgs(argc, argv);
     validateArgs();
-
-    con = createConnection();
-
-    if(con < 0) {
-        fprintf(stderr,"%s: Error starting network service!\n", name);
-        cleanUp();
-        exit(EXIT_FAILURE);
-    }
+    createConnection();
 
     struct sigaction action;
     memset(&action, 0, sizeof(struct sigaction));
@@ -371,6 +363,14 @@ int main (int argc, char **argv) {
     sigaction(SIGTERM, &action, NULL);
 
     while(!done) {
+        con = accept(sockfd, NULL, NULL);
+
+        if(con < 0) {
+            fprintf(stderr,"%s: Error starting network service!\n", name);
+            cleanUp();
+            exit(EXIT_FAILURE);
+        }
+
         char *line = NULL;
         int linelen = 0;
         int firstLine = 0;
@@ -485,8 +485,10 @@ int main (int argc, char **argv) {
             while((ch = fgetc(f)) != EOF) {
                 if(ch < 0) {
                     fprintf(stderr,"%s: Error reading file!\n", name);
+                    cleanUp();
+                    exit(EXIT_FAILURE);
                 }
-                fprintf(stderr, "%c", ch);
+                //fprintf(stderr, "%c", ch);
                 resBody[n++]  = (char)ch;
             }
             resBody[n]  = '\0';
@@ -502,6 +504,7 @@ int main (int argc, char **argv) {
                 } while ((ret < 0) && (errno == EINTR || errno == EAGAIN || errno == EWOULDBLOCK));
                 if(ret < 0) {
                     fprintf(stderr,"%s: Error transmitting data!\n", name);
+                    cleanUp();
                     exit(EXIT_FAILURE);
                 }
                 toWrite -= ret;
@@ -513,9 +516,10 @@ int main (int argc, char **argv) {
 
         }
         close(con);
-        con = accept(sockfd, NULL, NULL);
 
     }
+    shutdown(con, SHUT_WR);
+    close(con);
     cleanUp();
 
 }
