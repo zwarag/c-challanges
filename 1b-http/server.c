@@ -28,7 +28,6 @@ static char *defaultPort = "8080";
 static char *indexFileDefault = "index.html";
 static char *indexFile = NULL;
 static char *docRoot = NULL;
-static char *readPath = NULL;
 static char *reqPath = NULL;
 static char *resHeader = NULL;
 static char *resStatusCode = NULL;
@@ -51,12 +50,8 @@ void term (int signum) {
  * @details This function will clean up all remaining allocations.
  */
 void cleanUp() {
-    if(readPath != NULL)
-        free(readPath);
-    if(reqPath != NULL)
-        free(reqPath);
-    if(resHeader != NULL)
-        free(resHeader);
+    free(reqPath);
+    free(resHeader);
 }
 
 /**
@@ -97,6 +92,13 @@ void readArgs(int argc, char **argv) {
     if(port == NULL)
         port = defaultPort;
 
+    char *endpnt;
+    int portnr = strtol(port, &endpnt, 10);
+    if((endpnt == '\0') || ((portnr < 1) || (portnr > 49151))) {
+        fprintf(stderr, "%s: invalid port number!\n", name);
+        usage();
+    }
+
     if (optind >= argc) {
         fprintf(stderr, "%s: Missing arguments\n", name);
         usage();
@@ -110,33 +112,6 @@ void readArgs(int argc, char **argv) {
  * @details Function will go throu all given arguments and attempt to validate them accordingly to the given requirements for this task.
  */
 void validateArgs(void) {
-    char *endpnt;
-    int portnr = strtol(port, &endpnt, 10);
-    if((endpnt == '\0') || ((portnr < 1) || (portnr > 49151))) {
-        fprintf(stderr, "%s: invalid port number!\n", name);
-        usage();
-    }
-
-    int readPathSize = 0;
-    int docRootLen = strlen(docRoot);
-    int indexFileLen = strlen(indexFile);
-    readPathSize = docRootLen + indexFileLen + 3;
-    readPath = (char *)malloc(readPathSize);
-    if(readPath == NULL) {
-        fprintf(stderr, "%s: Memory error!", name);
-        cleanUp();
-        exit(EXIT_FAILURE);
-    }
-    memset(readPath, 0, readPathSize);
-    strncat(readPath, docRoot, docRootLen+1);
-    if (docRoot[docRootLen-1] != '/') // TODO: ???
-        strncat(readPath, "/\0", 2);
-    strncat(readPath, indexFile, indexFileLen);
-
-    if(access(readPath, R_OK) == -1) {
-        fprintf(stderr, "%s: Index files does not exist!\n", name);
-        usage();
-    }
 }
 
 /**
@@ -181,7 +156,7 @@ void createConnection(void) {
         cleanUp();
         exit(EXIT_FAILURE);
     }
-    
+
 }
 
 /**
@@ -288,35 +263,30 @@ int checkFirstLine(char *line) {
     }
 
     int reqUrlLen = strlen(reqUrl);
-
-    if(reqUrlLen == 0)
-        reqPath = readPath;
-    else {
-        int reqPathLen = strlen(docRoot); 
-        if(reqUrl[reqUrlLen-1] == '/') { // /folder/
-            indexFile = indexFileDefault;
-            reqPathLen += reqUrlLen;
-            reqPathLen += strlen(indexFile);
-        } else { // /file
-            indexFile = reqUrl;
-            reqPathLen += reqUrlLen;
-        }
-        reqPath = (char *)malloc(reqPathLen+1);
-        if(reqPath == NULL) {
-            fprintf(stderr, "%s: Memory error!\n", name);
-            free(reqUrl);
-            reqUrl = NULL;
-            cleanUp();
-            exit(EXIT_FAILURE);
-        }
-        memset(reqPath, 0, reqPathLen+1);
-        memcpy(reqPath, docRoot, strlen(docRoot));
-        if(reqUrl[reqUrlLen-1] == '/') {
-            memcpy(reqPath+strlen(docRoot), reqUrl, reqUrlLen);
-            memcpy(reqPath+strlen(docRoot)+reqUrlLen, indexFile, strlen(indexFile));
-        } else {
-            memcpy(reqPath+strlen(docRoot), indexFile, strlen(indexFile));
-        }
+    int reqPathLen = strlen(docRoot); 
+    if(reqUrl[reqUrlLen-1] == '/') { // /folder/
+        indexFile = indexFileDefault;
+        reqPathLen += reqUrlLen;
+        reqPathLen += strlen(indexFile);
+    } else { // /file
+        indexFile = reqUrl;
+        reqPathLen += reqUrlLen;
+    }
+    reqPath = (char *)malloc(reqPathLen+1);
+    if(reqPath == NULL) {
+        fprintf(stderr, "%s: Memory error!\n", name);
+        free(reqUrl);
+        reqUrl = NULL;
+        cleanUp();
+        exit(EXIT_FAILURE);
+    }
+    memset(reqPath, 0, reqPathLen+1);
+    memcpy(reqPath, docRoot, strlen(docRoot));
+    if(reqUrl[reqUrlLen-1] == '/') {
+        memcpy(reqPath+strlen(docRoot), reqUrl, reqUrlLen);
+        memcpy(reqPath+strlen(docRoot)+reqUrlLen, indexFile, strlen(indexFile));
+    } else {
+        memcpy(reqPath+strlen(docRoot), indexFile, strlen(indexFile));
     }
 
     free(reqUrl);
@@ -518,7 +488,7 @@ int main (int argc, char **argv) {
         close(con);
 
     }
-    shutdown(con, SHUT_WR);
+    shutdown(con, SHUT_RDWR);
     close(con);
     cleanUp();
 
