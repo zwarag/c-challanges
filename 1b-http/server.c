@@ -24,6 +24,7 @@
 static char *name = NULL;
 
 static char *port = NULL;
+static char *defaultPort = "8080";
 static char *indexFile = NULL;
 static char *docRoot = NULL;
 static char *readPath = NULL;
@@ -89,6 +90,9 @@ void readArgs(int argc, char **argv) {
         }
     }
 
+    if(port == NULL)
+        port = defaultPort;
+
     if (optind >= argc) {
         fprintf(stderr, "%s: Missing arguments\n", name);
         usage();
@@ -109,10 +113,6 @@ void validateArgs(void) {
         usage();
     }
 
-    if(indexFile == NULL) {
-        indexFile = "index.html";
-    }
-
     int readPathSize = 0;
     int docRootLen = strlen(docRoot);
     int indexFileLen = strlen(indexFile);
@@ -131,7 +131,6 @@ void validateArgs(void) {
 
     if(access(readPath, R_OK) == -1) {
         fprintf(stderr, "%s: Index files does not exist!\n", name);
-        //TODO: SEGFAULT this happens!?
         usage();
     }
 }
@@ -141,8 +140,7 @@ void validateArgs(void) {
  * @details This function will create a socket, bind it, listen on it and start accepting connections.
  * @return created Socket ID.
  */
-int connectToServer(void) {
-    //TODO: why is this connectToServer???
+int createConnection(void) {
     struct addrinfo hints, *ai;
 
     memset(&hints, 0, sizeof hints);
@@ -274,12 +272,17 @@ int checkFirstLine(char *line) {
     memcpy(HTTPVersion, &line[lineLen-9], 9);
     HTTPVersion[9] = '\0';
     if((strcmp(HTTPVersion, " HTTP/1.1")) != 0) {
-        fprintf(stdout, "%s: Protocol error!\n", name);
+        fprintf(stderr, "%s: Protocol error!\n", name);
         cleanUp();
         exit(2);
     }
 
-    reqUrl = strndup(line+4, lineLen-9-4); //TODO: check if null??
+    reqUrl = strndup(line+4, lineLen-9-4);
+    if(reqUrl == NULL) {
+        fprintf(stderr, "%s: Memory error!\n", name);
+        cleanUp();
+        exit(EXIT_FAILURE);
+    }
 
     int reqUrlLen = strlen(reqUrl);
 
@@ -288,7 +291,6 @@ int checkFirstLine(char *line) {
     else {
         int reqPathLen = strlen(docRoot); 
         if(reqUrl[reqUrlLen-1] == '/') { // /folder/
-            //TODO: Maybe set indexFile to index.html?
             indexFile = "index.html";
             reqPathLen += reqUrlLen;
             reqPathLen += strlen(indexFile);
@@ -323,6 +325,15 @@ int checkFirstLine(char *line) {
         return -1;
     }
 
+    struct stat path_stat;
+    stat(reqPath, &path_stat);
+    if(S_ISDIR(path_stat.st_mode)){
+        fprintf(stdout, "%s: Requested file '%s' is a folder!\n", name, reqPath);
+        resStatusCode = "404 ";
+        resMsg = "(Not Found)\r\n";
+        return -1;
+    }
+
     return 0;
 }
 
@@ -342,7 +353,7 @@ int main (int argc, char **argv) {
     readArgs(argc, argv);
     validateArgs();
 
-    con = connectToServer();
+    con = createConnection();
 
     if(con < 0) {
         fprintf(stderr,"%s: Error starting network service!\n", name);
@@ -375,7 +386,7 @@ int main (int argc, char **argv) {
         free(line);
 
         if(headerError == -1) {
-            //TODO: respond with HTTP Error and so on.
+
             time_t t = time(NULL);
             struct tm* tm_info;
             int tBufLen = 40;
@@ -431,10 +442,13 @@ int main (int argc, char **argv) {
             memset(resContentSize, 0, 14 + contentLenInt + 3);
             snprintf(resContentSize, (14 + contentLenInt + 3), "Content-Size: %ld\r\n", contentLen);
 
+            // OTHER
             resStatusCode = "200 ";
             resMsg = "OK\r\n";
             char *HTTPVersion = "HTTP/1.1 ";
             char *conClose = "Connection: Close\r\n\r\n";
+
+            // Build Header
             int resHeaderLen = strlen(HTTPVersion) + strlen(resStatusCode) + strlen(resMsg) + strlen(date) + strlen(resContentSize) + strlen(conClose);
             resHeader = (char *)malloc(resHeaderLen+1);
             if(resHeader == NULL) {
@@ -444,7 +458,6 @@ int main (int argc, char **argv) {
             }
             memset(resHeader, 0, resHeaderLen+1);
             snprintf(resHeader, resHeaderLen+1, "%s%s%s%s%s%s", HTTPVersion, resStatusCode, resMsg, date, resContentSize, conClose);
-
 
             //SEND HEADER
             if (write(con, resHeader, strlen(resHeader)) != strlen(resHeader)) {
@@ -458,11 +471,16 @@ int main (int argc, char **argv) {
             size_t n = 0;
             int ch;
 
-            resBody = malloc(contentLen); // TODO CHECK
+            resBody = malloc(contentLen+1);
+            if(resBody == NULL) {
+                fprintf(stderr, "%s: Memory error!\n", name);
+                cleanUp();
+                exit(EXIT_FAILURE);
+            }
 
             while((ch = fgetc(f)) != EOF) {
                 if(ch < 0) {
-                    fprintf(stderr,"%s: Error transmitting data!\n", name); // TODO: ???
+                    fprintf(stderr,"%s: Error reading file!\n", name);
                 }
                 fprintf(stderr, "%c", ch);
                 resBody[n++]  = (char)ch;
@@ -479,7 +497,7 @@ int main (int argc, char **argv) {
                     ret = write(con, resBodyPnt, toWrite);
                 } while ((ret < 0) && (errno == EINTR || errno == EAGAIN || errno == EWOULDBLOCK));
                 if(ret < 0) {
-                    fprintf(stderr,"%s: Error transmitting data!\n", name); // TODO: ???
+                    fprintf(stderr,"%s: Error transmitting data!\n", name);
                     exit(EXIT_FAILURE);
                 }
                 toWrite -= ret;
@@ -487,11 +505,14 @@ int main (int argc, char **argv) {
             }
 
             shutdown(con, SHUT_WR);
+            //fprintf(stderr, "%s: done writing data!\n", name);
 
-            fprintf(stderr, "%s: done writing data!\n", name);
         }
         close(con);
         con = accept(sockfd, NULL, NULL);
+
     }
     cleanUp();
+
 }
+
