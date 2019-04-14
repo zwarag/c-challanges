@@ -25,6 +25,7 @@ static char *name = NULL;
 
 static char *port = NULL;
 static char *defaultPort = "8080";
+static char *indexFileDefault = "index.html";
 static char *indexFile = NULL;
 static char *docRoot = NULL;
 static char *readPath = NULL;
@@ -82,13 +83,16 @@ void readArgs(int argc, char **argv) {
                 port = optarg;
                 break;
             case 'i':
-                indexFile = optarg;
+                //indexFile = optarg;
+                indexFileDefault = optarg;
                 break;
             default:
                 usage();
                 break;
         }
     }
+
+    indexFile = indexFileDefault;
 
     if(port == NULL)
         port = defaultPort;
@@ -291,7 +295,7 @@ int checkFirstLine(char *line) {
     else {
         int reqPathLen = strlen(docRoot); 
         if(reqUrl[reqUrlLen-1] == '/') { // /folder/
-            indexFile = "index.html";
+            indexFile = indexFileDefault;
             reqPathLen += reqUrlLen;
             reqPathLen += strlen(indexFile);
         } else { // /file
