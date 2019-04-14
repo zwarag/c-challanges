@@ -21,25 +21,27 @@
 #include <netinet/in.h>
 #include <unistd.h>
 
-static char *name = NULL;
+static char *name = NULL;                            /*!< program name */  
 
-static char *port = NULL;
-static char *defaultPort = "8080";
-static char *indexFileDefault = "index.html";
-static char *indexFile = NULL;
-static char *docRoot = NULL;
-static char *reqPath = NULL;
-static char *resHeader = NULL;
-static char *resStatusCode = NULL;
-static char *resMsg = NULL;
-static char *reqUrl = NULL;
-static int sockfd;
+static char *port = NULL;                            /*!< port given by user */  
+static char *defaultPort = "8080";                   /*!< port given by specification */
+static char *indexFile = NULL;                       /*!< index file by request*/
+static char *indexFileDefault = "index.html";        /*!< standard index file by specification */
+static char *docRoot = NULL;                         /*!< path to the document root, where server will load files from */
+static char *reqPath = NULL;                         /*!< request Path provided by client  */
+static char *reqUrl = NULL;                          /*!< request URL provided by client */  
+static char *resHeader = NULL;                       /*!< response Header build by server */
+static char *resStatusCode = NULL;                   /*!< response http status message */
+static char *resMsg = NULL;                          /*!< response Msg */
+static int sockfd;                                   /*!< socket descriptor */
 
-volatile sig_atomic_t done = 0;
+volatile sig_atomic_t done = 0;                      /*!< atomic runner variable */  
 
 /**
  * @brief Sets done to one to interrupt next loop.
  * @details This function will set done to 1, so that the after the handling of the last client request, the loop will be broken and the programm will exit instead of waiting for a new client.
+ * @param signum SIGNAL number
+ * @return void
  */
 void term (int signum) {
     done = 1;
@@ -48,17 +50,23 @@ void term (int signum) {
 /**
  * @brief clean up function.
  * @details This function will clean up all remaining allocations.
+ * @param void
+ * @return void
  */
-void cleanUp() {
+void cleanUp(void) {
     free(reqPath);
+    reqPath = NULL;
     free(resHeader);
+    resHeader = NULL;
 }
 
 /**
  * Mandatory usage function.
  * @brief This function writes helpful usage information about the program to stderr.
+ * @param void
+ * @return void
  */
-void usage() {
+void usage(void) {
     cleanUp();
     printf("SYNOPSIS\n\tserver [-p PORT] [-i INDEX] DOC_ROOT\nEXAMPLE\n\tserver -p 1280 -i index.html /Documents/my_website/\n");
     exit(EXIT_FAILURE);
@@ -69,6 +77,7 @@ void usage() {
  * @details Attempts to map all given arguments to the needed variables and pointers.
  * @param argc Number of arguments..
  * @param argv Argument Vector.
+ * @return void
  */
 void readArgs(int argc, char **argv) {
     int opt;
@@ -78,7 +87,6 @@ void readArgs(int argc, char **argv) {
                 port = optarg;
                 break;
             case 'i':
-                //indexFile = optarg;
                 indexFileDefault = optarg;
                 break;
             default:
@@ -92,13 +100,6 @@ void readArgs(int argc, char **argv) {
     if(port == NULL)
         port = defaultPort;
 
-    char *endpnt;
-    int portnr = strtol(port, &endpnt, 10);
-    if((endpnt == '\0') || ((portnr < 1) || (portnr > 49151))) {
-        fprintf(stderr, "%s: invalid port number!\n", name);
-        usage();
-    }
-
     if (optind >= argc) {
         fprintf(stderr, "%s: Missing arguments\n", name);
         usage();
@@ -107,17 +108,48 @@ void readArgs(int argc, char **argv) {
     docRoot = argv[optind];
 }
 
-/**
- * @brief Validate all given arguments.
- * @details Function will go throu all given arguments and attempt to validate them accordingly to the given requirements for this task.
- */
 void validateArgs(void) {
+
+    // port
+    char *endpnt;
+    int portnr = strtol(port, &endpnt, 10);
+    if((endpnt == '\0') || ((portnr < 1) || (portnr > 49151))) {
+        fprintf(stderr, "%s: invalid port number!\n", name);
+        usage();
+    }
+
+    // docRoot+indexFile
+    char *readPath;
+    int readPathSize = 0;
+    int docRootLen = strlen(docRoot);
+    int indexFileLen = strlen(indexFile);
+    readPathSize = docRootLen + indexFileLen + 3;
+    readPath = (char *)malloc(readPathSize);
+    if(readPath == NULL) {
+        fprintf(stderr, "%s: Memory error!", name);
+        cleanUp();
+        exit(EXIT_FAILURE);
+    }
+    memset(readPath, 0, readPathSize);
+    strncat(readPath, docRoot, docRootLen+1);
+    if (docRoot[docRootLen-1] != '/')
+        strncat(readPath, "/\0", 2);
+    strncat(readPath, indexFile, indexFileLen);
+
+    if(access(readPath, R_OK) == -1) {
+        fprintf(stderr, "%s: folder or index file does not exist!\n", name);
+        free(readPath);
+        usage();
+    }
+    free(readPath);
 }
+
 
 /**
  * @brief Connect to Server over Socket.
  * @details This function will create a socket, bind it, listen on it and start accepting connections.
- * @return created Socket ID.
+ * @param void
+ * @return void
  */
 void createConnection(void) {
     struct addrinfo hints, *ai;
@@ -224,6 +256,7 @@ int fgetline(int con, char **pnt) {
  * @brief Validates the first line of a response header.
  * @details This function goes through the first line of a response Header and will check if it complies with requirements given for this task. 
  * @param pnt A pointer pointing to the first Line of a response Header.
+ * @return 0 if header is ok, 1 if header does not conform
  */
 int checkFirstLine(char *line) {
 
@@ -240,9 +273,9 @@ int checkFirstLine(char *line) {
 
     // Check if reqestPath exists.
     if((strncmp(line+4, "/", 1)) != 0) {
-        fprintf(stdout, "%s: Protocol error!\n", name);
-        cleanUp();
-        exit(2);
+        resStatusCode = "400 ";
+        resMsg  = "(Bad Request)\r\n";
+        return -1;
     }
 
     // Check if end of line equals "HTTP/1.1"
@@ -250,9 +283,9 @@ int checkFirstLine(char *line) {
     memcpy(HTTPVersion, &line[lineLen-9], 9);
     HTTPVersion[9] = '\0';
     if((strcmp(HTTPVersion, " HTTP/1.1")) != 0) {
-        fprintf(stderr, "%s: Protocol error!\n", name);
-        cleanUp();
-        exit(2);
+        resStatusCode = "400 ";
+        resMsg  = "(Bad Request)\r\n";
+        return -1;
     }
 
     reqUrl = strndup(line+4, lineLen-9-4);
@@ -291,8 +324,7 @@ int checkFirstLine(char *line) {
 
     free(reqUrl);
 
-    if (access(reqPath, R_OK) == -1) {
-        fprintf(stdout, "%s: Requested file '%s' does not exist!\n", name, reqPath);
+    if (access(reqPath, R_OK) == -1) { // cannor read it
         resStatusCode = "404 ";
         resMsg = "(Not Found)\r\n";
         return -1;
@@ -300,8 +332,7 @@ int checkFirstLine(char *line) {
 
     struct stat path_stat;
     stat(reqPath, &path_stat);
-    if(S_ISDIR(path_stat.st_mode)){
-        fprintf(stdout, "%s: Requested file '%s' is a folder!\n", name, reqPath);
+    if(S_ISDIR(path_stat.st_mode)) { // can read it but is a folder
         resStatusCode = "404 ";
         resMsg = "(Not Found)\r\n";
         return -1;
@@ -333,6 +364,7 @@ int main (int argc, char **argv) {
     sigaction(SIGTERM, &action, NULL);
 
     while(!done) {
+        cleanUp();
         con = accept(sockfd, NULL, NULL);
 
         if(con < 0) {
@@ -347,7 +379,7 @@ int main (int argc, char **argv) {
         int headerError = 0;
 
         for(;;) { // Read Request
-            if ((linelen = fgetline(con, &line)) < 1) { // TODO: maybe check *line
+            if ((linelen = fgetline(con, &line)) < 1) {
                 break;
             }
             if (firstLine == 0) {
@@ -400,9 +432,10 @@ int main (int argc, char **argv) {
             strftime(date, 38, "Date: %a, %d %b %y %H:%M:%S GMT\r\n", tm_info);
 
             //CONTENT LENGTH
+            // Not a 404 because we allready check existance and accesability in in checkFirstLine
             FILE *f = fopen(reqPath, "rb");
             if (f == NULL) {
-                fprintf(stderr, "%s: Error reading file!\n", name); // 404?
+                fprintf(stderr, "%s: Error reading file!\n", name);
                 cleanUp();
                 exit(EXIT_FAILURE);
             }
@@ -455,10 +488,10 @@ int main (int argc, char **argv) {
             while((ch = fgetc(f)) != EOF) {
                 if(ch < 0) {
                     fprintf(stderr,"%s: Error reading file!\n", name);
+                    free(resBody);
                     cleanUp();
                     exit(EXIT_FAILURE);
                 }
-                //fprintf(stderr, "%c", ch);
                 resBody[n++]  = (char)ch;
             }
             resBody[n]  = '\0';
@@ -474,6 +507,7 @@ int main (int argc, char **argv) {
                 } while ((ret < 0) && (errno == EINTR || errno == EAGAIN || errno == EWOULDBLOCK));
                 if(ret < 0) {
                     fprintf(stderr,"%s: Error transmitting data!\n", name);
+                    free(resBody);
                     cleanUp();
                     exit(EXIT_FAILURE);
                 }
@@ -482,9 +516,10 @@ int main (int argc, char **argv) {
             }
 
             shutdown(con, SHUT_WR);
-            //fprintf(stderr, "%s: done writing data!\n", name);
+            free(resBody);
 
         }
+        shutdown(con, SHUT_RDWR);
         close(con);
 
     }
