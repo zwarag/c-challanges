@@ -1,0 +1,106 @@
+/**
+ * @file client.c
+ * @author Harrys Kavan <e1529309@student.tuwien.ac.at>
+ * @date 11.11.2018
+ * 
+ * @brief HTTP Client Software
+ * 
+ * @detail: This Program allows to load Files from HTTP Server supporting HTTP/1.1.
+ **/
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <getopt.h>
+#include <string.h>
+#include <sys/socket.h>
+#include <netdb.h>
+#include <unistd.h>
+
+char *name = NULL;
+char *strNum1 = NULL;
+char *strNum2 = NULL;
+
+void getArgs(int argc, char **argv) {
+    name = argv[0];
+    int opt;
+    while ((opt = getopt(argc, argv, "")) != -1) {
+        switch (opt) {
+            default: /* '?' */
+                fprintf(stderr, "Usage: %s\n",
+                        argv[0]);
+                exit(EXIT_FAILURE);
+        }
+    }
+    if ( argc - optind != 0) {
+        fprintf(stderr, "Usage: %s\n",
+                argv[0]);
+        exit(EXIT_FAILURE);
+    }
+}
+
+char * readString() {
+#define BUF_SIZE 4
+    char buf[BUF_SIZE];
+    char *str;
+    size_t strSize = 1; // including the 0 after the following malloc
+    str = malloc(sizeof(char)*BUF_SIZE);
+    if (str == NULL) {
+        fprintf(stderr, "%s, ERROR: could not allocate enough memory!\n", name);
+        exit(EXIT_FAILURE);
+    }
+    str[0] = '\0';
+    while(fgets(buf, BUF_SIZE, stdin)) {
+        char *from = str;
+        strSize += strlen(buf);
+        str = realloc(str, strSize);
+        if(str == NULL) {
+            fprintf(stderr, "%s, ERROR: could not rellocate enough memory!\n", name);
+            free(from);
+            exit(EXIT_FAILURE);
+        }
+        strcat(str, buf);
+        char *pos;
+        if((pos=strchr(buf, '\n')) != NULL)
+            break;
+    }
+    if(ferror(stdin)) {
+        fprintf(stderr, "%s, ERROR: could not read from stdin!\n", name);
+        free(str);
+        exit(EXIT_FAILURE);
+    }
+    return str;
+}
+
+unsigned int parseChar(char c) {
+    if ('0' <= c && c <= '9') return c - '0';
+    if ('a' <= c && c <= 'f') return 10 + c - 'a';
+    if ('A' <= c && c <= 'F') return 10 + c - 'A';
+    abort();
+}
+
+int main (int argc, char **argv) {
+    // Handle getopt
+    getArgs(argc, argv);
+   
+    // Read into dynamic buffers
+    strNum1 = readString();
+    strNum2 = readString();
+
+    // fork if to large or return multiplied result
+    if(strlen(strNum1) != 1 && strlen(strNum2) != 1) {
+        // Convert the two integers
+        // TODO: check return values
+        fprintf(stdout, "%02x\n", parseChar(strNum1[0]) * parseChar(strNum2[0]));
+    } else {
+        //TODO: Fork work to childs
+        fprintf(stderr, "not implemented\n");
+        free(strNum1);
+        free(strNum2);
+        exit(EXIT_FAILURE);
+    }
+
+    //TODO: Handle the result
+    //TODO: print the result
+    //TODO: optional: make cool print
+    exit(EXIT_SUCCESS);
+}
