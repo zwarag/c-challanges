@@ -102,7 +102,50 @@ unsigned int parseChar(char c)
         return 10 + c - 'a';
     if ('A' <= c && c <= 'F')
         return 10 + c - 'A';
-    abort();
+    fprintf(stderr, "%s: ERROR '%c' not a number!\n", name, c);
+    exit(EXIT_FAILURE);
+}
+
+char parseInt(int c)
+{
+    switch (c)
+    {
+    case 0:
+        return '0';
+    case 1:
+        return '1';
+    case 2:
+        return '2';
+    case 3:
+        return '3';
+    case 4:
+        return '4';
+    case 5:
+        return '5';
+    case 6:
+        return '6';
+    case 7:
+        return '7';
+    case 8:
+        return '8';
+    case 9:
+        return '8';
+    case 10:
+        return 'a';
+    case 11:
+        return 'b';
+    case 12:
+        return 'c';
+    case 13:
+        return 'd';
+    case 14:
+        return 'e';
+    case 15:
+        return 'f';
+    default:
+        fprintf(stderr, "%s: ERROR '%c' not a number!\n", name, c);
+        exit(EXIT_FAILURE);
+    }
 }
 
 /**
@@ -111,11 +154,10 @@ unsigned int parseChar(char c)
 
 void generatePointers(void)
 {
-    fprintf(stderr, "generating pointers\n");
-    Al = strNum1;
-    Ah = strNum1 + (inputLength / 2);
-    Bl = strNum2;
-    Bh = strNum2 + (inputLength / 2);
+    Ah = strNum1;
+    Al = strNum1 + (inputLength / 2);
+    Bh = strNum2;
+    Bl = strNum2 + (inputLength / 2);
 }
 
 int main(int argc, char **argv)
@@ -141,25 +183,15 @@ int main(int argc, char **argv)
         exit(EXIT_FAILURE);
     }
 
-    fprintf(stderr, "A %ld: %sB %ld: %s", strlen(strNum1), strNum1, strlen(strNum2), strNum2);
-
     // check length is one and multiply
     if (strlen(strNum1) == 2 && strlen(strNum2) == 2)
     {
-        fprintf(stdout, "%1x\n", parseChar(strNum1[0]) * parseChar(strNum2[0]));
+        fprintf(stdout, "%1x", parseChar(strNum1[0]) * parseChar(strNum2[0]));
         exit(EXIT_SUCCESS);
-    }
-    else
-    {
-        generatePointers();
     }
 
     //TODO: Fork work to childs
     pid_t procs[CHILD_NUM] = {-1, -1, -1, -1};
-    //for (int i = 0; i < CHILD_NUM + 20; i++)
-    //{
-    //    fprintf(stderr, "%s: procs: %ld\n", name, procs[i]);
-    //}
     int childs = 0;
     int status[CHILD_NUM];
 
@@ -177,16 +209,37 @@ int main(int argc, char **argv)
         }
     }
 
+    generatePointers();
+    if (strlen(Ah) == 1)
+    {
+        procs[0] = -2;
+    }
+    if (strlen(Al) == 1)
+    {
+        procs[1] = -2;
+    }
+    if (strlen(Bh) == 1)
+    {
+        procs[2] = -2;
+    }
+    if (strlen(Bl) == 1)
+    {
+        procs[3] = -2;
+    }
+
     do
     {
-        procs[childs] = fork();
-        if (procs[childs] == -1)
+        if (procs[childs] != -2)
         {
-            fprintf(stderr, "%s: failed to fork!\n", name);
-            exit(EXIT_FAILURE);
+            procs[childs] = fork();
+            if (procs[childs] == -1)
+            {
+                fprintf(stderr, "%s: failed to fork!\n", name);
+                exit(EXIT_FAILURE);
+            }
+            if (procs[childs] == 0)
+                break;
         }
-        if (procs[childs] == 0)
-            break;
         childs++;
     } while (childs < CHILD_NUM);
     if (childs == 4)
@@ -218,17 +271,8 @@ int main(int argc, char **argv)
         dup2(pipes[childs][PIPE_FROM_C][PIPE_W], STDOUT_FILENO);
         dup2(pipes[childs][PIPE_TO_C][PIPE_R], STDIN_FILENO);
 
-        //execlp(name, name, NULL);
-        char *num = NULL;
-        size_t chars = 0;
-        FILE *fd = fdopen(pipes[childs][PIPE_TO_C][PIPE_R], "r");
-        if (getline(&num, &chars, fd) > 0)
-            fprintf(stderr, "%d", childs + 10);
-        fclose(fd);
-        fprintf(stdout, "%d", childs + 20);
+        execlp(name, name, NULL);
         fflush(stdout);
-        fprintf(stderr, "%s: child %d done read %s.\n", name, childs, num);
-        //fprintf(stderr, "%s: child %d done read.\n", name, childs);
         close(pipes[childs][PIPE_FROM_C][PIPE_W]);
         close(pipes[childs][PIPE_TO_C][PIPE_R]);
     }
@@ -243,30 +287,55 @@ int main(int argc, char **argv)
             close(pipes[i][PIPE_TO_C][PIPE_R]);
         }
 
-        // pass data down
-        int h = strlen(strNum1) / CHILD_NUM;
-        int run = 0;
-        for (int i = 0; i < CHILD_NUM; i++)
+        generatePointers();
+        fprintf(stderr, "---\n%s%s%s%s---\n", Ah, Al, Bh, Bl);
+
+        // Child 0: Ah * Bh
+        generatePointers();
+        while (Ah != Al)
         {
-            dprintf(pipes[i][PIPE_TO_C][PIPE_W], "%d\n", i + 100);
+            dprintf(pipes[0][PIPE_TO_C][PIPE_W], "%c", Ah[0]);
+            Ah++;
         }
-        for (int i = 0; i < CHILD_NUM / 2; i++)
+        dprintf(pipes[0][PIPE_TO_C][PIPE_W], "\n");
+        while (Bh != Bl)
         {
-            //while (run < h * i + 1)
-            //{
-            //    //dprintf(pipes[i][PIPE_TO_C][PIPE_W],
-            //    //"%1x", floatarr_get(&even, i));
-            //}
-            close(pipes[i][PIPE_TO_C][PIPE_W]);
+            dprintf(pipes[0][PIPE_TO_C][PIPE_W], "%c", Bh[0]);
+            Bh++;
         }
-        for (int i = 2; i < CHILD_NUM; i++)
+        dprintf(pipes[0][PIPE_TO_C][PIPE_W], "\n");
+        close(pipes[0][PIPE_TO_C][PIPE_W]);
+
+        // Child 1: Ah * Bl
+        generatePointers();
+        while (Ah != Al)
         {
-            //dprintf(pipes[i][PIPE_TO_C][PIPE_W],
-            //        "%f\n", floatarr_get(&even, i));
-            close(pipes[i][PIPE_TO_C][PIPE_W]);
+            dprintf(pipes[1][PIPE_TO_C][PIPE_W], "%c", Ah[0]);
+            Ah++;
         }
-        fflush(stdout);
+        dprintf(pipes[1][PIPE_TO_C][PIPE_W], "\n");
+        dprintf(pipes[1][PIPE_TO_C][PIPE_W], "%s", Bl);
+        close(pipes[1][PIPE_TO_C][PIPE_W]);
+
+        // Child 2: Al * Bh
+        generatePointers();
+        dprintf(pipes[2][PIPE_TO_C][PIPE_W], "%s", Al);
+        while (Bh != Bl)
+        {
+            dprintf(pipes[2][PIPE_TO_C][PIPE_W], "%c", Bh[0]++);
+            Bh++;
+        }
+        dprintf(pipes[2][PIPE_TO_C][PIPE_W], "\n");
+        close(pipes[2][PIPE_TO_C][PIPE_W]);
+
+        // Child 3: Al * Bl
+        generatePointers();
+        dprintf(pipes[3][PIPE_TO_C][PIPE_W], "%s", Al);
+        dprintf(pipes[3][PIPE_TO_C][PIPE_W], "%s", Bl);
+        close(pipes[3][PIPE_TO_C][PIPE_W]);
+
         fprintf(stderr, "%s: parent 2\n", name);
+        fflush(stderr);
 
         //read from pipes
         char *results[CHILD_NUM] = {NULL, NULL, NULL, NULL};
@@ -279,6 +348,7 @@ int main(int argc, char **argv)
                 fprintf(stderr, "%s: failed to read child %d errno %d!\n", name, i, errno);
                 exit(EXIT_FAILURE);
             }
+            //fclose(fd);
             close(pipes[i][PIPE_FROM_C][PIPE_R]);
         }
 
@@ -291,13 +361,97 @@ int main(int argc, char **argv)
 
         for (int i = 0; i < CHILD_NUM; i++)
         {
-            fprintf(stderr, "%s: results %d %s\n", name, i, results[i]);
+            //fprintf(stderr, "%s: results %d %s\n", name, i, results[i]);
         }
-    }
 
+        chars[0] = strlen(results[0]);
+        chars[1] = strlen(results[1]);
+        chars[2] = strlen(results[2]);
+        chars[3] = strlen(results[3]);
+        int offset = inputLength - 1;
+        int offsetHalf = (inputLength - 1) / 2;
+        unsigned int c3_val = 0;
+        unsigned int c2_val = 0;
+        unsigned int c1_val = 0;
+        unsigned int c0_val = 0;
+        unsigned int retval = 0;
+        unsigned int overflow = 0;
+        char buf[(chars[0]) + 1];
+        char *bufPnt = buf;
+        while (chars[0] > 0 || chars[1] > 0 || chars[2] > 0 || chars[3] > 0)
+        {
+            if (offset > 0)
+            {
+                offset--;
+                c0_val = 0;
+            }
+            else
+            {
+                if (chars[0] > 0)
+                {
+                    c0_val = parseChar(results[0][chars[0] - 1]);
+                    chars[0]--;
+                }
+                else
+                {
+                    c0_val = 0;
+                }
+            }
+            if (offsetHalf > 0)
+            {
+                offsetHalf--;
+                c1_val = 0;
+                c2_val = 0;
+            }
+            else
+            {
+                if (chars[2] > 0)
+                {
+                    c2_val = parseChar(results[2][chars[2] - 1]);
+                    chars[2]--;
+                }
+                else
+                {
+                    c2_val = 0;
+                }
+                if (chars[1] > 0)
+                {
+                    c1_val = parseChar(results[1][chars[1] - 1]);
+                    chars[1]--;
+                }
+                else
+                {
+                    c1_val = 0;
+                }
+            }
+            if (chars[3] > 0)
+            {
+                c3_val = parseChar(results[3][chars[3] - 1]);
+                chars[3]--;
+            }
+            else
+            {
+                c3_val = 0;
+            }
+
+            retval = c3_val + c2_val + c1_val + c0_val + overflow;
+            overflow = retval / 16;
+            sprintf(bufPnt, "%c", parseInt(retval % 16));
+            bufPnt++;
+        }
+        if (overflow != 0)
+            sprintf(bufPnt, "%c", parseInt(overflow % 16));
+        while (bufPnt != buf)
+        {
+            fprintf(stdout, "%c", bufPnt[0]);
+            bufPnt--;
+        }
+        fprintf(stdout, "%c", bufPnt[0]);
+    }
+    fflush(stdout);
     //TODO: Handle the result
     //TODO: print the result
     //TODO: optional: make cool print
-    fprintf(stderr, "closing\n");
+    //fprintf(stderr, "closing\n");
     exit(EXIT_SUCCESS);
 }
