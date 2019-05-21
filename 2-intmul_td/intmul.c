@@ -15,6 +15,7 @@
 #include <sys/wait.h>
 #include <netdb.h>
 #include <unistd.h>
+#include <errno.h>
 
 #define CHILD_NUM 4
 #define BUF_SIZE 4
@@ -218,9 +219,16 @@ int main(int argc, char **argv)
         dup2(pipes[childs][PIPE_TO_C][PIPE_R], STDIN_FILENO);
 
         //execlp(name, name, NULL);
-        fprintf(stdout, "%d", childs + 10);
+        char *num = NULL;
+        size_t chars = 0;
+        FILE *fd = fdopen(pipes[childs][PIPE_TO_C][PIPE_R], "r");
+        if (getline(&num, &chars, fd) > 0)
+            fprintf(stderr, "%d", childs + 10);
+        fclose(fd);
+        fprintf(stdout, "%d", childs + 20);
         fflush(stdout);
-        fprintf(stderr, "%s: child %d done.\n", name, childs);
+        fprintf(stderr, "%s: child %d done read %s.\n", name, childs, num);
+        //fprintf(stderr, "%s: child %d done read.\n", name, childs);
         close(pipes[childs][PIPE_FROM_C][PIPE_W]);
         close(pipes[childs][PIPE_TO_C][PIPE_R]);
     }
@@ -238,6 +246,10 @@ int main(int argc, char **argv)
         // pass data down
         int h = strlen(strNum1) / CHILD_NUM;
         int run = 0;
+        for (int i = 0; i < CHILD_NUM; i++)
+        {
+            dprintf(pipes[i][PIPE_TO_C][PIPE_W], "%d\n", i + 100);
+        }
         for (int i = 0; i < CHILD_NUM / 2; i++)
         {
             //while (run < h * i + 1)
@@ -264,7 +276,7 @@ int main(int argc, char **argv)
             FILE *fd = fdopen(pipes[i][PIPE_FROM_C][PIPE_R], "r");
             if (getline(&results[i], &chars[i], fd) == -1)
             {
-                fprintf(stderr, "%s: failed to read!\n", name);
+                fprintf(stderr, "%s: failed to read child %d errno %d!\n", name, i, errno);
                 exit(EXIT_FAILURE);
             }
             close(pipes[i][PIPE_FROM_C][PIPE_R]);
