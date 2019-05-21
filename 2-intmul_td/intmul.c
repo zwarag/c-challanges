@@ -219,14 +219,14 @@ int main(int argc, char **argv)
 
         //execlp(name, name, NULL);
         fflush(stdout);
-        fprintf(stderr, "%s: %d\n", name, childs);
+        fprintf(stderr, "%s: child %d done.\n", name, childs);
         close(pipes[childs][PIPE_FROM_C][PIPE_W]);
         close(pipes[childs][PIPE_TO_C][PIPE_R]);
     }
     else
     { // parent
 
-        fprintf(stderr, "%s: parent\n", name);
+        fprintf(stderr, "%s: parent 1\n", name);
         // close pipes to other childs
         for (int i = 0; i < CHILD_NUM; i++)
         {
@@ -273,10 +273,12 @@ int main(int argc, char **argv)
         {
             waitpid(procs[i], &status[i], 0);
         }
+        //fflush(stdout);
+        fprintf(stderr, "%s: parent 3\n", name);
 
         for (int i = 0; i < CHILD_NUM; i++)
         {
-            fprintf(stderr, "%s: %s\n", name, results[i]);
+            fprintf(stderr, "%s: results %d %s\n", name, i, results[i]);
         }
     }
 
