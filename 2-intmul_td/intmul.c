@@ -140,7 +140,7 @@ int main(int argc, char **argv)
         exit(EXIT_FAILURE);
     }
 
-    fprintf(stderr, "A %ld: %s \nB %ld: %s\n", strlen(strNum1), strNum1, strlen(strNum2), strNum2);
+    fprintf(stderr, "A %ld: %sB %ld: %s", strlen(strNum1), strNum1, strlen(strNum2), strNum2);
 
     // check length is one and multiply
     if (strlen(strNum1) == 2 && strlen(strNum2) == 2)
@@ -206,10 +206,10 @@ int main(int argc, char **argv)
             }
             else
             {
-                close(pipes[childs][PIPE_FROM_C][PIPE_R]);
-                close(pipes[childs][PIPE_FROM_C][PIPE_W]);
-                close(pipes[childs][PIPE_TO_C][PIPE_R]);
-                close(pipes[childs][PIPE_TO_C][PIPE_W]);
+                close(pipes[i][PIPE_FROM_C][PIPE_R]);
+                close(pipes[i][PIPE_FROM_C][PIPE_W]);
+                close(pipes[i][PIPE_TO_C][PIPE_R]);
+                close(pipes[i][PIPE_TO_C][PIPE_W]);
             }
         }
 
@@ -218,6 +218,7 @@ int main(int argc, char **argv)
         dup2(pipes[childs][PIPE_TO_C][PIPE_R], STDIN_FILENO);
 
         //execlp(name, name, NULL);
+        fprintf(stdout, "%d", childs + 10);
         fflush(stdout);
         fprintf(stderr, "%s: child %d done.\n", name, childs);
         close(pipes[childs][PIPE_FROM_C][PIPE_W]);
@@ -258,16 +259,16 @@ int main(int argc, char **argv)
         //read from pipes
         char *results[CHILD_NUM] = {NULL, NULL, NULL, NULL};
         size_t chars[CHILD_NUM];
-        //for (int i = 0; i < CHILD_NUM; i++)
-        //{
-        //    FILE *fd = fdopen(pipes[i][PIPE_FROM_C][PIPE_R], "r");
-        //    if (getline(&results[i], &chars[i], fd) == -1)
-        //    {
-        //        fprintf(stderr, "%s: failed to read!\n", name);
-        //        exit(EXIT_FAILURE);
-        //    }
-        //    close(pipes[i][PIPE_FROM_C][PIPE_R]);
-        //}
+        for (int i = 0; i < CHILD_NUM; i++)
+        {
+            FILE *fd = fdopen(pipes[i][PIPE_FROM_C][PIPE_R], "r");
+            if (getline(&results[i], &chars[i], fd) == -1)
+            {
+                fprintf(stderr, "%s: failed to read!\n", name);
+                exit(EXIT_FAILURE);
+            }
+            close(pipes[i][PIPE_FROM_C][PIPE_R]);
+        }
 
         for (int i = 0; i < CHILD_NUM; i++)
         {
