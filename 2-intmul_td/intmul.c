@@ -102,7 +102,7 @@ unsigned int parseChar(char c)
         return 10 + c - 'a';
     if ('A' <= c && c <= 'F')
         return 10 + c - 'A';
-    fprintf(stderr, "%s: ERROR '%c' not a number!\n", name, c);
+    fprintf(stderr, "%s: ERROR '%c' not a character!\n", name, c);
     exit(EXIT_FAILURE);
 }
 
@@ -129,7 +129,7 @@ char parseInt(int c)
     case 8:
         return '8';
     case 9:
-        return '8';
+        return '9';
     case 10:
         return 'a';
     case 11:
@@ -155,9 +155,9 @@ char parseInt(int c)
 void generatePointers(void)
 {
     Ah = strNum1;
-    Al = strNum1 + (inputLength / 2);
+    Al = strNum1 + ((inputLength - 1) / 2);
     Bh = strNum2;
-    Bl = strNum2 + (inputLength / 2);
+    Bl = strNum2 + ((inputLength - 1) / 2);
 }
 
 int main(int argc, char **argv)
@@ -173,6 +173,7 @@ int main(int argc, char **argv)
     if (strlen(strNum1) != strlen(strNum2))
     {
         fprintf(stderr, "%s: inputs do not have equal length!\n", name);
+        fprintf(stdout, "0");
         exit(EXIT_FAILURE);
     }
     inputLength = strlen(strNum1);
@@ -209,37 +210,16 @@ int main(int argc, char **argv)
         }
     }
 
-    generatePointers();
-    if (strlen(Ah) == 1)
-    {
-        procs[0] = -2;
-    }
-    if (strlen(Al) == 1)
-    {
-        procs[1] = -2;
-    }
-    if (strlen(Bh) == 1)
-    {
-        procs[2] = -2;
-    }
-    if (strlen(Bl) == 1)
-    {
-        procs[3] = -2;
-    }
-
     do
     {
-        if (procs[childs] != -2)
+        procs[childs] = fork();
+        if (procs[childs] == -1)
         {
-            procs[childs] = fork();
-            if (procs[childs] == -1)
-            {
-                fprintf(stderr, "%s: failed to fork!\n", name);
-                exit(EXIT_FAILURE);
-            }
-            if (procs[childs] == 0)
-                break;
+            fprintf(stderr, "%s: failed to fork: %s!\n", name, strerror(errno));
+            exit(EXIT_FAILURE);
         }
+        if (procs[childs] == 0)
+            break;
         childs++;
     } while (childs < CHILD_NUM);
     if (childs == 4)
@@ -279,7 +259,7 @@ int main(int argc, char **argv)
     else
     { // parent
 
-        fprintf(stderr, "%s: parent 1\n", name);
+        //fprintf(stderr, "%s: parent 1\n", name);
         // close pipes to other childs
         for (int i = 0; i < CHILD_NUM; i++)
         {
@@ -288,7 +268,7 @@ int main(int argc, char **argv)
         }
 
         generatePointers();
-        fprintf(stderr, "---\n%s%s%s%s---\n", Ah, Al, Bh, Bl);
+        fprintf(stderr, "---\nAh: %sAl: %sBh: %sBl: %s---\n", Ah, Al, Bh, Bl);
 
         // Child 0: Ah * Bh
         generatePointers();
@@ -334,7 +314,7 @@ int main(int argc, char **argv)
         dprintf(pipes[3][PIPE_TO_C][PIPE_W], "%s", Bl);
         close(pipes[3][PIPE_TO_C][PIPE_W]);
 
-        fprintf(stderr, "%s: parent 2\n", name);
+        //fprintf(stderr, "%s: parent 2\n", name);
         fflush(stderr);
 
         //read from pipes
@@ -343,12 +323,17 @@ int main(int argc, char **argv)
         for (int i = 0; i < CHILD_NUM; i++)
         {
             FILE *fd = fdopen(pipes[i][PIPE_FROM_C][PIPE_R], "r");
-            if (getline(&results[i], &chars[i], fd) == -1)
+            if (fd == NULL)
             {
-                fprintf(stderr, "%s: failed to read child %d errno %d!\n", name, i, errno);
+                fprintf(stderr, "%s: failed to open pipe to child %d errno %d!\n", name, i, errno);
                 exit(EXIT_FAILURE);
             }
-            //fclose(fd);
+            if (getline(&results[i], &chars[i], fd) == -1)
+            {
+                fprintf(stderr, "%s: failed to read child %d errno %d %s!\n", name, i, errno, strerror(errno));
+                exit(EXIT_FAILURE);
+            }
+            fclose(fd);
             close(pipes[i][PIPE_FROM_C][PIPE_R]);
         }
 
@@ -356,12 +341,21 @@ int main(int argc, char **argv)
         {
             waitpid(procs[i], &status[i], 0);
         }
-        //fflush(stdout);
-        fprintf(stderr, "%s: parent 3\n", name);
+        for (int i = 0; i < CHILD_NUM; i++)
+        {
+            if (status[i] != 0)
+            {
+                free(strNum1);
+                free(strNum2);
+                fprintf(stderr, "%s: error in child %d errno %d!\n", name, i, errno);
+                exit(EXIT_FAILURE);
+            }
+        }
+        //fprintf(stderr, "%s: parent 3\n", name);
 
         for (int i = 0; i < CHILD_NUM; i++)
         {
-            //fprintf(stderr, "%s: results %d %s\n", name, i, results[i]);
+            fprintf(stderr, "%s: results %d %s\n", name, i, results[i]);
         }
 
         chars[0] = strlen(results[0]);
@@ -376,7 +370,8 @@ int main(int argc, char **argv)
         unsigned int c0_val = 0;
         unsigned int retval = 0;
         unsigned int overflow = 0;
-        char buf[(chars[0]) + 1];
+        char buf[(2 * inputLength) + 1];
+        memset(buf, 0, (2 * inputLength) + 1);
         char *bufPnt = buf;
         while (chars[0] > 0 || chars[1] > 0 || chars[2] > 0 || chars[3] > 0)
         {
@@ -405,15 +400,6 @@ int main(int argc, char **argv)
             }
             else
             {
-                if (chars[2] > 0)
-                {
-                    c2_val = parseChar(results[2][chars[2] - 1]);
-                    chars[2]--;
-                }
-                else
-                {
-                    c2_val = 0;
-                }
                 if (chars[1] > 0)
                 {
                     c1_val = parseChar(results[1][chars[1] - 1]);
@@ -422,6 +408,15 @@ int main(int argc, char **argv)
                 else
                 {
                     c1_val = 0;
+                }
+                if (chars[2] > 0)
+                {
+                    c2_val = parseChar(results[2][chars[2] - 1]);
+                    chars[2]--;
+                }
+                else
+                {
+                    c2_val = 0;
                 }
             }
             if (chars[3] > 0)
@@ -439,19 +434,34 @@ int main(int argc, char **argv)
             sprintf(bufPnt, "%c", parseInt(retval % 16));
             bufPnt++;
         }
+        fprintf(stderr, "%s: overflow %d\n", name, overflow);
         if (overflow != 0)
             sprintf(bufPnt, "%c", parseInt(overflow % 16));
+        else
+            bufPnt--;
+
+        int h = 1;
         while (bufPnt != buf)
         {
-            fprintf(stdout, "%c", bufPnt[0]);
+            if (bufPnt[0] != '0' || h == 0)
+            {
+                fprintf(stdout, "%c", bufPnt[0]);
+                h = 0;
+            }
             bufPnt--;
         }
         fprintf(stdout, "%c", bufPnt[0]);
+        for (int i = 0; i < CHILD_NUM; i++)
+        {
+            free(results[i]);
+        }
     }
     fflush(stdout);
     //TODO: Handle the result
     //TODO: print the result
     //TODO: optional: make cool print
     //fprintf(stderr, "closing\n");
+    free(strNum1);
+    free(strNum2);
     exit(EXIT_SUCCESS);
 }
