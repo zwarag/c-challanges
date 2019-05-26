@@ -1,11 +1,11 @@
 /**
- * @file client.c
+ * @file intmul.c
  * @author Harrys Kavan <e1529309@student.tuwien.ac.at>
- * @date 11.11.2018
+ * @date 26.05.2019
  * 
- * @brief HTTP Client Software
+ * @brief Large Integer Multiplikation by fork
  * 
- * @detail: This Program allows to load Files from HTTP Server supporting HTTP/1.1.
+ * @detail: allows to multiply large hexadecimal numbers of length that is within the power of two.
  **/
 
 #include <stdio.h>
@@ -17,24 +17,57 @@
 #include <unistd.h>
 #include <errno.h>
 
-#define CHILD_NUM 4
-#define BUF_SIZE 4
+#define CHILD_NUM 4 /*!< maximum child number */
+#define BUF_SIZE 4  /*!< standard buf size */
 
 #define PIPE_R 0
 #define PIPE_W 1
 #define PIPE_TO_C 0
 #define PIPE_FROM_C 1
-static int pipes[CHILD_NUM][2][2];
+static int pipes[CHILD_NUM][2][2]; /*!< proc,pipe-{from|to}-c,{read|write} */
 
-static char *name = NULL;
-static char *strNum1 = NULL;
-static char *strNum2 = NULL;
-static int inputLength = 0;
-static char *Al = NULL;
-static char *Ah = NULL;
-static char *Bl = NULL;
-static char *Bh = NULL;
+static char *name = NULL;                                   /*!< program name */
+static char *strNum1 = NULL;                                /*!< first Number as string */
+static char *strNum2 = NULL;                                /*!< second Numer as string */
+static int inputLength = 0;                                 /*!< input Length of strNum1 and strNum2 */
+static char *Al = NULL;                                     /*!< number Al */
+static char *Ah = NULL;                                     /*!< number Ah */
+static char *Bl = NULL;                                     /*!< Number Bl */
+static char *Bh = NULL;                                     /*!< Number Bh */
+static char *results[CHILD_NUM] = {NULL, NULL, NULL, NULL}; /*!< results of multiplicaiton Ah * Bh * 100 ; Ah * Bl * 10 : Al * Bh * 10 ; Ab * Bh */
+static size_t chars[CHILD_NUM];                             /*!< length of chars in results */
 
+/**
+ * @brief clean up function.
+ * @details This function will clean up all remaining allocations.
+ * @return void
+ * @param void
+ */
+void cleanUp(void)
+{
+    free(strNum1);
+    free(strNum2);
+}
+
+/**
+ * @brief clean up results function.
+ * @details This function will clean up all remaining allocations of the results array.
+ * @return void
+ * @param void
+ */
+void cleanUpResults(void)
+{
+    for (int i = 0; i < CHILD_NUM; i++)
+        free(results[i]);
+}
+
+/**
+ * @brief Reads in all arguments and parses them.
+ * @details Assures that no flags and arguments have been supplied. 
+ * @param argc Number of arguments..
+ * @param argv Argument Vector.
+ * @return void
+ */
 void getArgs(int argc, char **argv)
 {
     name = argv[0];
@@ -57,7 +90,13 @@ void getArgs(int argc, char **argv)
     }
 }
 
-char *readString()
+/**
+ * @brief Reads in one line of characters from stdin
+ * @details Dynamically allocated buffer that can read one very long line from stdin. It does not assure that the input is usable as hexadecimal number.
+ * @param void
+ * @return (char *) pointing to the beginning of the memory wher the line is stored.
+ */
+char *readString(void)
 {
     char buf[BUF_SIZE];
     char *str;
@@ -76,9 +115,8 @@ char *readString()
         str = realloc(str, strSize);
         if (str == NULL)
         {
-            fprintf(stderr, "%s, ERROR: could not rellocate enough memory!\n", name);
             free(from);
-            exit(EXIT_FAILURE);
+            return NULL;
         }
         strcat(str, buf);
         char *pos;
@@ -87,13 +125,18 @@ char *readString()
     }
     if (ferror(stdin))
     {
-        fprintf(stderr, "%s, ERROR: could not read from stdin!\n", name);
         free(str);
-        exit(EXIT_FAILURE);
+        return NULL;
     }
     return str;
 }
 
+/**
+ * @brief parses a char (hex) to an int (dec)
+ * @details Gets a char, interprets it as a hexadecimal value and returns its decimal value as an unsigned integer
+ * @param char c char that should get converted
+ * @return unsigned int value in decimal of the hexadecimal interpretation of char
+ */
 unsigned int parseChar(char c)
 {
     if ('0' <= c && c <= '9')
@@ -102,10 +145,17 @@ unsigned int parseChar(char c)
         return 10 + c - 'a';
     if ('A' <= c && c <= 'F')
         return 10 + c - 'A';
-    fprintf(stderr, "%s: ERROR '%c' not a character!\n", name, c);
+    cleanUp();
+    cleanUpResults();
     exit(EXIT_FAILURE);
 }
 
+/**
+ * @brief parses a int (dec) to an char (hex)
+ * @details Gets a integer, interprets converts it the hexadecimal represenation stored as a char
+ * @param  unsigned int that should get converted
+ * @return char c value in hexadecimal of the decimal interpretation of int
+ */
 char parseInt(int c)
 {
     switch (c)
@@ -143,15 +193,18 @@ char parseInt(int c)
     case 15:
         return 'f';
     default:
-        fprintf(stderr, "%s: ERROR '%c' not a number!\n", name, c);
+        cleanUp();
+        cleanUpResults();
         exit(EXIT_FAILURE);
     }
 }
 
 /**
- * @param void
- **/
-
+ * @brief sets pointers for the Arithmetic operations.
+ * @details Ah, Al, Bh, Bl will allways be accesed through [0]. So it actually just points to the values that we want to work with.
+ * @param  void
+ * @return void
+ */
 void generatePointers(void)
 {
     Ah = strNum1;
@@ -160,6 +213,15 @@ void generatePointers(void)
     Bl = strNum2 + ((inputLength - 1) / 2);
 }
 
+/**
+ * Program entry point.
+ * Formula (Ah * Bh * 100) + (Ah * Bl * 10) + (Al * Bh * 10) + (Al * Bl)
+ * @brief Calculates the multiplicaiton of two hexadecimal numbers A * B
+ * @details Program first reads two large numbers, then splits them up to calculate them by the formula shown above by forkig itself until no forthuer split is possible.
+ * @param argc The argument counter.
+ * @param argv The argument vector.
+ * @return Returns EXIT_SUCCESS.
+ */
 int main(int argc, char **argv)
 {
     // Handle getopt
@@ -167,20 +229,28 @@ int main(int argc, char **argv)
 
     // Read into dynamic buffers
     strNum1 = readString();
+    if (strNum1 == NULL)
+    {
+        exit(EXIT_FAILURE);
+    }
     strNum2 = readString();
+    if (strNum2 == NULL)
+    {
+        free(strNum1);
+        exit(EXIT_FAILURE);
+    }
 
     //TODO: check equal length
     if (strlen(strNum1) != strlen(strNum2))
     {
-        fprintf(stderr, "%s: inputs do not have equal length!\n", name);
-        fprintf(stdout, "0");
+        cleanUp();
         exit(EXIT_FAILURE);
     }
     inputLength = strlen(strNum1);
 
     if (strlen(strNum1) < 2 || strlen(strNum2) < 2)
     {
-        fprintf(stderr, "%s: got not inputs!\n", name);
+        cleanUp();
         exit(EXIT_FAILURE);
     }
 
@@ -188,6 +258,7 @@ int main(int argc, char **argv)
     if (strlen(strNum1) == 2 && strlen(strNum2) == 2)
     {
         fprintf(stdout, "%1x", parseChar(strNum1[0]) * parseChar(strNum2[0]));
+        cleanUp();
         exit(EXIT_SUCCESS);
     }
 
@@ -198,14 +269,14 @@ int main(int argc, char **argv)
 
     for (int i = 0; i < CHILD_NUM; i++)
     {
-        if (pipe(pipes[i][PIPE_R]) == -1)
+        if (pipe(pipes[i][PIPE_TO_C]) == -1)
         {
-            fprintf(stderr, "%s: pipe error!\n", name);
+            cleanUp();
             exit(EXIT_FAILURE);
         }
-        if (pipe(pipes[i][PIPE_W]) == -1)
+        if (pipe(pipes[i][PIPE_FROM_C]) == -1)
         {
-            fprintf(stderr, "%s: pipe error!\n", name);
+            cleanUp();
             exit(EXIT_FAILURE);
         }
     }
@@ -215,7 +286,7 @@ int main(int argc, char **argv)
         procs[childs] = fork();
         if (procs[childs] == -1)
         {
-            fprintf(stderr, "%s: failed to fork: %s!\n", name, strerror(errno));
+            cleanUp();
             exit(EXIT_FAILURE);
         }
         if (procs[childs] == 0)
@@ -259,16 +330,12 @@ int main(int argc, char **argv)
     else
     { // parent
 
-        //fprintf(stderr, "%s: parent 1\n", name);
         // close pipes to other childs
         for (int i = 0; i < CHILD_NUM; i++)
         {
             close(pipes[i][PIPE_FROM_C][PIPE_W]);
             close(pipes[i][PIPE_TO_C][PIPE_R]);
         }
-
-        generatePointers();
-        fprintf(stderr, "---\nAh: %sAl: %sBh: %sBl: %s---\n", Ah, Al, Bh, Bl);
 
         // Child 0: Ah * Bh
         generatePointers();
@@ -314,50 +381,52 @@ int main(int argc, char **argv)
         dprintf(pipes[3][PIPE_TO_C][PIPE_W], "%s", Bl);
         close(pipes[3][PIPE_TO_C][PIPE_W]);
 
-        //fprintf(stderr, "%s: parent 2\n", name);
-        fflush(stderr);
-
         //read from pipes
-        char *results[CHILD_NUM] = {NULL, NULL, NULL, NULL};
-        size_t chars[CHILD_NUM];
         for (int i = 0; i < CHILD_NUM; i++)
         {
             FILE *fd = fdopen(pipes[i][PIPE_FROM_C][PIPE_R], "r");
             if (fd == NULL)
             {
-                fprintf(stderr, "%s: failed to open pipe to child %d errno %d!\n", name, i, errno);
+                cleanUp();
                 exit(EXIT_FAILURE);
             }
             if (getline(&results[i], &chars[i], fd) == -1)
             {
-                fprintf(stderr, "%s: failed to read child %d errno %d %s!\n", name, i, errno, strerror(errno));
+                fclose(fd);
+                while (i > 0)
+                {
+                    close(pipes[i][PIPE_FROM_C][PIPE_R]);
+                    free(results[i]);
+                    i--;
+                }
+                free(results[i]);
+                for (int i = 0; i < CHILD_NUM; i++)
+                    close(pipes[i][PIPE_FROM_C][PIPE_R]);
+                cleanUp();
                 exit(EXIT_FAILURE);
             }
             fclose(fd);
             close(pipes[i][PIPE_FROM_C][PIPE_R]);
         }
 
+        // wait for child to finish
         for (int i = 0; i < CHILD_NUM; i++)
         {
             waitpid(procs[i], &status[i], 0);
         }
+
+        // exit if there was an error within a child
         for (int i = 0; i < CHILD_NUM; i++)
         {
             if (status[i] != 0)
             {
-                free(strNum1);
-                free(strNum2);
-                fprintf(stderr, "%s: error in child %d errno %d!\n", name, i, errno);
+                cleanUp();
+                cleanUpResults();
                 exit(EXIT_FAILURE);
             }
         }
-        //fprintf(stderr, "%s: parent 3\n", name);
 
-        for (int i = 0; i < CHILD_NUM; i++)
-        {
-            fprintf(stderr, "%s: results %d %s\n", name, i, results[i]);
-        }
-
+        // handle the result
         chars[0] = strlen(results[0]);
         chars[1] = strlen(results[1]);
         chars[2] = strlen(results[2]);
@@ -434,12 +503,12 @@ int main(int argc, char **argv)
             sprintf(bufPnt, "%c", parseInt(retval % 16));
             bufPnt++;
         }
-        fprintf(stderr, "%s: overflow %d\n", name, overflow);
         if (overflow != 0)
             sprintf(bufPnt, "%c", parseInt(overflow % 16));
         else
             bufPnt--;
 
+        // print the result
         int h = 1;
         while (bufPnt != buf)
         {
@@ -451,17 +520,9 @@ int main(int argc, char **argv)
             bufPnt--;
         }
         fprintf(stdout, "%c", bufPnt[0]);
-        for (int i = 0; i < CHILD_NUM; i++)
-        {
-            free(results[i]);
-        }
     }
     fflush(stdout);
-    //TODO: Handle the result
-    //TODO: print the result
-    //TODO: optional: make cool print
-    //fprintf(stderr, "closing\n");
-    free(strNum1);
-    free(strNum2);
+    cleanUp();
+    cleanUpResults();
     exit(EXIT_SUCCESS);
 }
