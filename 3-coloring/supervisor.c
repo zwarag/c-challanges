@@ -20,8 +20,10 @@
 #include <fcntl.h>    /* For O_* constants */
 #include <sys/stat.h> /* For mode constants */
 #include <semaphore.h>
+#include <errno.h>
 #include "common.h"
 
+static volatile sig_atomic_t quit = 0;
 static char *name = NULL;
 
 /**
@@ -53,9 +55,23 @@ static void getArgs(int argc, char **argv)
     }
 }
 
+// function to handle the signals
+void handle_signal(int signal)
+{
+    quit = 1;
+}
+
 int main(int argc, char *argv[])
 {
     getArgs(argc, argv);
+
+    struct sigaction sa;
+    memset(&sa, 0, sizeof(sa));
+    sa.sa_handler = handle_signal;
+    sigaction(SIGINT, &sa, NULL);
+    sigaction(SIGTERM, &sa, NULL);
+    srand(time(NULL));
+
     struct myshm *shared;
 
     int shmfd = shm_open(SHM_NAME, O_RDWR | O_CREAT, PERMISSION);
@@ -80,6 +96,14 @@ int main(int argc, char *argv[])
         shared->rb.solutions[i].edges[0].to = i;
     }
 
+    for (int i = 0; i < MAX_SOLUTIONS; i++)
+    {
+        fprintf(stderr, "ring: ");
+        for (int j = 0; j < MAX_EDGES; j++)
+            fprintf(stderr, "%d-%d ", shared->rb.solutions[i].edges[j].from, shared->rb.solutions[i].edges[j].to);
+        fprintf(stderr, "\n");
+    }
+
     sem_t *sem_write = sem_open(SEM_WRITE, O_CREAT | O_EXCL, 0600, MAX_SOLUTIONS); // consistency
     sem_t *sem_read = sem_open(SEM_READ, O_CREAT | O_EXCL, 0600, 0);               // consistency
     sem_t *sem_perm = sem_open(SEM_PERM, O_CREAT | O_EXCL, 0600, 0);               // mutex
@@ -87,7 +111,72 @@ int main(int argc, char *argv[])
     if (sem_write == SEM_FAILED || sem_read == SEM_FAILED || sem_perm == SEM_FAILED)
         exitWithError(name, "Could not open sem");
 
+    sem_post(sem_perm);
+
+    Solution solution;
+    Solution bestSolution;
+    int bestSolutionLength = 9;
+
     // Handle Ringbuffer
+    while (!quit)
+    {
+        // init solution
+        for (int i = 0; i < MAX_EDGES; i++)
+        {
+            solution.edges[i].from = -1;
+            solution.edges[i].from = -1;
+        }
+
+        // wait for solution
+        if (sem_wait(sem_read) == -1)
+        {
+            if (errno == EINTR) // interrupted by signal?
+                continue;
+            exitWithError(name, "other error"); // other error
+        }
+
+        // handle solution
+        int solutionLength = 0;
+        for (; solutionLength < MAX_EDGES; solutionLength++)
+        {
+            if (shared->rb.solutions[shared->iRead].edges[solutionLength].to == 0 && shared->rb.solutions[shared->iRead].edges[solutionLength].from == 0)
+                break;
+        }
+        if (solutionLength < bestSolutionLength)
+        {
+            bestSolutionLength = solutionLength;
+            memcpy(&bestSolution, &shared->rb.solutions[shared->iRead], sizeof(Solution));
+            printf("[%s] Solution with %i edges: ", name, bestSolutionLength);
+            for (int i = 0; i < MAX_EDGES; i++)
+            {
+                printf("%d-%d ", bestSolution.edges[i].from, bestSolution.edges[i].to);
+            }
+            printf("\n");
+        }
+
+        // reset ringbuffer solution
+        for (int i = 0; i < MAX_EDGES; i++)
+        {
+            solution.edges[i].to = -1;
+            solution.edges[i].from = -1;
+        }
+        memcpy(&shared->rb.solutions[shared->iRead], &solution, sizeof(Solution));
+
+        // check if best solution possible
+        if (bestSolutionLength == 0)
+        {
+            printf("\nfound a acyclic solution!\n");
+            break;
+        }
+
+        // increase iRead counter.
+        if (shared->iRead == MAX_SOLUTIONS - 1)
+            shared->iRead = 0;
+        else
+            shared->iRead++;
+
+        sem_post(sem_write);
+    }
 
     /* unmap shared memory */
     if (munmap(shared, sizeof *shared) == -1)
