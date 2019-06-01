@@ -84,5 +84,95 @@ int main(int argc, char *argv[])
     for (int i = 0; i <= knotsMax; i++)
         vertex[i].id = i;
 
+    struct myshm *shared;
+
+    int shmfd = shm_open(SHM_NAME, O_RDWR, PERMISSION);
+    if (shmfd == -1)
+        exitWithError(name, "shm open error");
+
+    shared = mmap(NULL, sizeof(struct myshm), PROT_READ | PROT_WRITE, MAP_SHARED, shmfd, 0);
+    if (shared == MAP_FAILED)
+        exitWithError(name, "shm mmap error");
+
+    // sem_open()
+    sem_t *sem_write = sem_open(SEM_WRITE, 0);
+    sem_t *sem_read = sem_open(SEM_READ, 0);
+    sem_t *sem_perm = sem_open(SEM_PERM, 0);
+
+    if (sem_write == SEM_FAILED || sem_read == SEM_FAILED || sem_perm == SEM_FAILED)
+        exitWithError(name, "Could not open sem");
+
+    Solution solution;
+    for (;;)
+    {
+        // init solution
+        for (int i = 0; i < MAX_EDGES; i++)
+        {
+            solution.edges[i].to = 0;
+            solution.edges[i].from = 0;
+        }
+
+        // random coloring
+        for (int i = 0; i <= knotsMax; i++)
+            vertex[i].col = rand() % 3;
+
+        int h = 0;
+        for (int i = 0; i < edgesCnt; i++)
+        {
+            if (vertex[edges[i].from].col == vertex[edges[i].to].col)
+            {
+                solution.edges[h].from = edges[i].from;
+                solution.edges[h].to = edges[i].to;
+                h++;
+                if (h >= MAX_EDGES)
+                {
+                    h = -1;
+                    break;
+                }
+            }
+        }
+
+        if (h >= 0)
+        {
+
+            if (sem_wait(sem_write) == -1)
+            {
+                if (errno == EINTR) // interrupted by signal?
+                    continue;
+                exitWithError(name, "other error"); // other error
+            }
+            if (sem_wait(sem_perm) == -1)
+            {
+                if (errno == EINTR) // interrupted by signal?
+                    continue;
+                exitWithError(name, "other error"); // other error
+            }
+
+            // check if supervisor wants to stop
+            memcpy(&shared->rb.solutions[shared->iWrite], &solution, sizeof(Solution));
+            if (shared->iWrite == MAX_SOLUTIONS - 1)
+                shared->iWrite = 0;
+            else
+                shared->iWrite++;
+            sem_post(sem_perm);
+            sem_post(sem_read);
+            if (h == 0)
+                break;
+        }
+    }
+
+    /* unmap shared memory */
+    if (munmap(shared, sizeof *shared) == -1)
+        exitWithError(name, "munmap");
+
+    // close(shm)
+    if (close(shmfd) == -1)
+        exitWithError(name, "close");
+
+    // sem_close()
+    sem_close(sem_write);
+    sem_close(sem_read);
+    sem_close(sem_perm);
+
     exit(EXIT_SUCCESS);
 }
