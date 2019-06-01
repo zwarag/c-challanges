@@ -84,6 +84,5 @@ int main(int argc, char *argv[])
     for (int i = 0; i <= knotsMax; i++)
         vertex[i].id = i;
 
-    
     exit(EXIT_SUCCESS);
 }
