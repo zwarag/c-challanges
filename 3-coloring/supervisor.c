@@ -146,12 +146,14 @@ int main(int argc, char *argv[])
         {
             bestSolutionLength = solutionLength;
             memcpy(&bestSolution, &shared->rb.solutions[shared->iRead], sizeof(Solution));
-            printf("[%s] Solution with %i edges: ", name, bestSolutionLength);
-            for (int i = 0; i < MAX_EDGES; i++)
+            if (bestSolutionLength != 0)
+                printf("[%s] Solution with %i edges: ", name, bestSolutionLength);
+            for (int i = 0; i < bestSolutionLength; i++)
             {
                 printf("%d-%d ", bestSolution.edges[i].from, bestSolution.edges[i].to);
             }
-            printf("\n");
+            if (bestSolutionLength != 0)
+                printf("\n");
         }
 
         // reset ringbuffer solution
@@ -165,7 +167,7 @@ int main(int argc, char *argv[])
         // check if best solution possible
         if (bestSolutionLength == 0)
         {
-            printf("\nfound a acyclic solution!\n");
+            printf("[%s] The graph is 3-colorable!\n", name);
             break;
         }
 
